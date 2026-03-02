@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail:*)",
+      "Bash(npm run:*)",
+      "Bash(echo Not available:*)",
+      "Bash(cd:*)",
+      "Bash(curl:*)",
+      "mcp__figma__get_metadata",
+      "Bash(python3:*)",
+      "mcp__figma__get_design_context",
+      "mcp__figma__get_screenshot",
+      "Bash(node:*)"
+    ]
+  }
+}
