@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "swag-stores-demo",
+      "cwd": "/Users/eran.dover/Documents/Code/swag-exploration",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5199", "--strictPort"],
+      "port": 5199
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import { LogoBrandingOverlay } from './components/LogoBrandingOverlay';
 import { TopBar, MainNav } from './components/TopBar';
 import { useCompanyLogo } from './context/CompanyLogoContext';
 import { SwagCatalog } from './pages/SwagCatalog';
-import { SwagOverview, SwagStores } from './pages/SwagOverview';
+import { SwagOverview } from './pages/SwagOverview';
 import { MyDesigns } from './pages/MyDesigns';
 import { DesignWorkspace } from './pages/DesignWorkspace';
 import { ProductDetail } from './pages/ProductDetail';
@@ -26,6 +26,11 @@ import { BonuslyRewards } from './pages/BonuslyRewards';
 import { DesignPublicView } from './pages/DesignPublicView';
 import { CollectionPreview } from './pages/CollectionPreview';
 import { DesignPublishPage } from './pages/DesignPublishPage';
+import { StoresProvider } from './context/StoresContext';
+import { StoresConsole } from './pages/stores/StoresConsole';
+import { StoreCreateWizard } from './pages/stores/StoreCreateWizard';
+import { StoreManager } from './pages/stores/StoreManager';
+import { StorefrontShell } from './storefront/StorefrontShell';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -39,7 +44,10 @@ function AppShell() {
   const backgroundLocation = state?.backgroundLocation;
 
   const displayLocation = backgroundLocation ?? location;
-  const hideBars = displayLocation.pathname === '/send' || displayLocation.pathname === '/generating' || displayLocation.pathname === '/collection/edit' || displayLocation.pathname === '/collection/preview' || displayLocation.pathname.startsWith('/preview/') || displayLocation.pathname.startsWith('/design/') || displayLocation.pathname.startsWith('/designs/') || displayLocation.pathname.startsWith('/share/');
+  const hideBars = displayLocation.pathname === '/send' || displayLocation.pathname === '/generating' || displayLocation.pathname === '/collection/edit' || displayLocation.pathname === '/collection/preview' || displayLocation.pathname.startsWith('/preview/') || displayLocation.pathname.startsWith('/design/') || displayLocation.pathname.startsWith('/designs/') || displayLocation.pathname.startsWith('/share/') || displayLocation.pathname.startsWith('/store/') || displayLocation.pathname === '/stores/new';
+
+  // Consumer storefronts are a separate product surface — hide Snappy dev chrome too
+  const isStorefront = displayLocation.pathname.startsWith('/store/');
 
   // Logo branding overlay — show whenever a new logo is uploaded (except on /generating which has its own)
   const { uploadCount, logoUrl } = useCompanyLogo();
@@ -72,7 +80,10 @@ function AppShell() {
           <Route path="/designs/:id"     element={<DesignWorkspace />} />
           <Route path="/inventory"      element={<Inventory />} />
           <Route path="/shipments"      element={<Shipments />} />
-          <Route path="/stores"         element={<SwagStores />} />
+          <Route path="/stores"         element={<StoresConsole />} />
+          <Route path="/stores/new"     element={<StoreCreateWizard />} />
+          <Route path="/stores/:id"     element={<StoreManager />} />
+          <Route path="/store/:slug/*"  element={<StorefrontShell />} />
           <Route path="/product/:id"    element={<ProductDetail />} />
           <Route path="/design/:id"     element={<SwagDesignTool />} />
           <Route path="/generating"         element={<BrandingLoader />} />
@@ -100,6 +111,7 @@ function AppShell() {
       </div>
 
       {/* Dev: reset all data + flows reference */}
+      {!isStorefront && (
       <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5">
         <a
           href="/flows"
@@ -122,6 +134,7 @@ function AppShell() {
           ↺ Reset all
         </button>
       </div>
+      )}
 
       {/* Logo branding overlay */}
       {overlayVisible && overlayLogoUrl && (
@@ -139,7 +152,9 @@ function App() {
     <BrowserRouter>
       <CompanyLogoProvider>
         <LookbookProvider>
-          <AppShell />
+          <StoresProvider>
+            <AppShell />
+          </StoresProvider>
         </LookbookProvider>
       </CompanyLogoProvider>
     </BrowserRouter>
