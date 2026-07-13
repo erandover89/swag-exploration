@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import {
-  ArrowRight, ShoppingBag, ChevronLeft, ChevronRight, ChevronDown,
-  Upload, Plus, X, ImageIcon, FolderOpen, Package, Truck, Globe, Loader2, Store,
+  ArrowRight, ChevronLeft, ChevronRight, ChevronDown,
+  Upload, Plus, X, ImageIcon, FolderOpen, Package, Truck, Globe, Loader2,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -17,19 +17,19 @@ import { analyzeLogo, type LogoAnalysis } from '../utils/logoAnalysis';
 import { fetchLogoForDomain } from '../components/LogoInput';
 import { ReplaceLogoModal } from '../components/ReplaceLogoModal';
 
-export type SwagTab = 'overview' | 'catalog' | 'your-swag' | 'brands' | 'flows';
-export type YourSwagSubTab = 'my-designs' | 'collections' | 'stores' | 'inventory' | 'shipments';
+export type SwagTab = 'overview' | 'catalog' | 'your-swag' | 'stores' | 'brands' | 'flows';
+export type YourSwagSubTab = 'my-designs' | 'collections' | 'inventory' | 'shipments';
 
 const SWAG_TABS: { id: SwagTab; label: string; path: string }[] = [
   { id: 'overview',    label: 'Discover',    path: '/swag' },
   { id: 'catalog',     label: 'Catalog',     path: '/catalog' },
+  { id: 'stores',      label: 'Stores',      path: '/stores' },
   { id: 'your-swag',   label: 'My Swag',     path: '/designs' },
 ];
 
 const YOUR_SWAG_ITEMS: { id: YourSwagSubTab; label: string; path: string; icon: ReactNode }[] = [
   { id: 'collections', label: 'My Collections',      path: '/my-collections', icon: <FolderOpen className="w-4 h-4" /> },
   { id: 'my-designs',  label: 'My Designs',          path: '/designs',        icon: <ImageIcon className="w-4 h-4" /> },
-  { id: 'stores',      label: 'My Stores',           path: '/stores',         icon: <Store className="w-4 h-4" /> },
   { id: 'inventory',   label: 'My Inventory',        path: '/inventory',      icon: <Package className="w-4 h-4" /> },
   { id: 'shipments',   label: 'My Shipment History', path: '/shipments',      icon: <Truck className="w-4 h-4" /> },
 ];
@@ -109,44 +109,6 @@ export function YourSwagSidebar({ active }: { active: YourSwagSubTab }) {
         })}
       </nav>
     </aside>
-  );
-}
-
-// ── Stores page ──────────────────────────────────────────────────────────────
-export function SwagStores() {
-  return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      <SwagPageHeader activeTab="your-swag" />
-      <div className="max-w-[1400px] mx-auto pt-7 px-4 md:pl-[80px] md:pr-[40px] pb-24">
-        <div className="flex gap-8">
-          <YourSwagSidebar active="stores" />
-          <div className="flex-1 flex flex-col items-center gap-6 text-center py-16">
-        <div className="w-20 h-20 rounded-[24px] flex items-center justify-center" style={{ backgroundColor: '#fff7ed' }}>
-          <ShoppingBag className="w-9 h-9" style={{ color: '#e97316' }} />
-        </div>
-        <div>
-          <h2
-            className="text-[32px] font-semibold text-snp-navy-950 mb-3"
-            style={{ fontFamily: "'Clash Display', sans-serif" }}
-          >
-            Create a Swag Store
-          </h2>
-          <p className="text-[15px] text-snp-navy-600 max-w-md leading-relaxed">
-            Set up a branded company store where your team can browse and order swag on demand — no manual fulfillment needed.
-          </p>
-        </div>
-        <button
-          className="flex items-center gap-2 h-12 px-8 rounded-[16px] text-white text-[14px] font-semibold hover:opacity-90 transition-opacity"
-          style={{ background: 'linear-gradient(180deg, #f97316 0%, #ea580c 100%)' }}
-          onClick={() => alert('Store creation flow coming soon…')}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          Create your store
-        </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 

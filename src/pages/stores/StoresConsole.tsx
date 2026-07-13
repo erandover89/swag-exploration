@@ -5,6 +5,7 @@ import {
   Store as StoreIcon, DollarSign, TrendingUp, ShoppingCart, ChevronDown, X, Pencil,
 } from 'lucide-react';
 import { useStores } from '../../context/StoresContext';
+import { SwagPageHeader } from '../SwagOverview';
 import { StoreLogo, StoreStatusPill } from '../../components/stores/StoreBits';
 import { fmtMoney, type ClientType, type DistributorStore, type StoreStatus } from '../../data/storesData';
 
@@ -137,16 +138,17 @@ export function StoresConsole() {
 
   return (
     <div className="min-h-screen bg-background pb-24" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      {/* ── Page header ── */}
+      <SwagPageHeader activeTab="stores" />
+      {/* ── Console header ── */}
       <div className="bg-white border-b border-snp-navy-200">
-        <div className="max-w-[1280px] mx-auto px-6 md:px-10 pt-8 pb-6">
+        <div className="max-w-[1280px] mx-auto px-6 md:px-10 pt-6 pb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-3 mb-1.5">
-                <h1 className="text-[40px] text-snp-navy-950 leading-none" style={{ fontFamily: "'Clash Display', sans-serif", fontWeight: 600 }}>
-                  Stores
-                </h1>
-                <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full" style={{ background: '#eef2ff', color: '#4338ca' }}>
+                <h2 className="text-[24px] text-snp-navy-950 leading-none" style={{ fontFamily: "'Clash Display', sans-serif", fontWeight: 600 }}>
+                  Your storefronts
+                </h2>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full" style={{ background: '#eef2ff', color: '#4338ca' }}>
                   SanMar Distributor Edition
                 </span>
               </div>
