@@ -15,10 +15,10 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="flex items-baseline gap-1.5 text-[13px] font-semibold text-[#012754]">
+      <label className="flex items-baseline gap-1.5 text-[13px] font-semibold text-snp-navy-950">
         {label}
         {required && <span className="text-[#e63946] text-[11px]">*</span>}
-        {hint && <span className="text-[12px] font-normal text-[#a6b3c3]">{hint}</span>}
+        {hint && <span className="text-[12px] font-normal text-snp-navy-400">{hint}</span>}
       </label>
       {children}
     </div>
@@ -26,7 +26,7 @@ function Field({
 }
 
 const inputCls =
-  'w-full h-11 border border-[#e0ebf7] rounded-[10px] px-4 text-[13px] text-[#345276] placeholder:text-[#b7cfec] focus:outline-none focus:border-[#3077c9] focus:ring-2 focus:ring-[#3077c9]/10 transition-colors bg-white';
+  'w-full h-11 border border-snp-navy-200 rounded-[10px] px-4 text-[13px] text-snp-navy-700 placeholder:text-snp-navy-300 focus:outline-none focus:border-snp-indigo-600 focus:ring-2 focus:ring-snp-indigo-600/10 transition-colors bg-white';
 
 export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrderModalProps) {
   const [firstName, setFirstName]   = useState('');
@@ -60,46 +60,46 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
         {!submitted ? (
           <>
             {/* ── Header ─────────────────────────────────────────────── */}
-            <div className="px-8 pt-7 pb-5 border-b border-[#e0ebf7] shrink-0">
+            <div className="px-8 pt-7 pb-5 border-b border-snp-navy-200 shrink-0">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-[10px] font-bold text-[#a6b3c3] uppercase tracking-widest mb-1">Bulk & Kits</p>
+                  <p className="text-[10px] font-bold text-snp-navy-400 uppercase tracking-widest mb-1">Bulk & Kits</p>
                   <h2
-                    className="text-[22px] font-semibold text-[#012754] leading-tight"
+                    className="text-[22px] font-semibold text-snp-navy-950 leading-tight"
                     style={{ fontFamily: "'Clash Display', sans-serif" }}
                   >
-                    Start an Order
+                    Get a Quote
                   </h2>
                 </div>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 rounded-full bg-[#f5f8fc] flex items-center justify-center text-[#8093a9] hover:text-[#345276] transition-colors shrink-0 mt-1"
+                  className="w-8 h-8 rounded-full bg-snp-navy-50 flex items-center justify-center text-snp-navy-500 hover:text-snp-navy-700 transition-colors shrink-0 mt-1"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Product summary */}
-              <div className="flex items-center gap-3 p-3 bg-[#f5f8fc] rounded-[12px] border border-[#e0ebf7]">
-                <div className="w-10 h-10 rounded-[8px] bg-white border border-[#e0ebf7] flex items-center justify-center overflow-hidden shrink-0">
+              <div className="flex items-center gap-3 p-3 bg-snp-navy-50 rounded-[12px] border border-snp-navy-200">
+                <div className="w-10 h-10 rounded-[8px] bg-white border border-snp-navy-200 flex items-center justify-center overflow-hidden shrink-0">
                   {isEmoji ? (
                     <span className="text-xl leading-none">{product.image}</span>
                   ) : (
-                    <img src={product.image} alt="" className="w-full h-full object-cover" />
+                    <img src={product.image} alt="" className="w-full h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-[#3077c9] uppercase tracking-widest leading-tight">{product.brand}</p>
-                  <p className="text-[13px] font-semibold text-[#012754] leading-snug truncate">{product.name}</p>
+                  <p className="text-[10px] font-bold text-snp-indigo-600 uppercase tracking-widest leading-tight">{product.brand}</p>
+                  <p className="text-[13px] font-semibold text-snp-navy-950 leading-snug truncate">{product.name}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {product.leadTimeDays && (
-                    <div className="flex items-center gap-1 text-[11px] text-[#59728f]">
+                    <div className="flex items-center gap-1 text-[11px] text-snp-navy-600">
                       <Clock className="w-3.5 h-3.5" />
                       <span>{product.leadTimeDays} day lead time</span>
                     </div>
                   )}
-                  <div className="flex items-center gap-1 text-[11px] text-[#59728f]">
+                  <div className="flex items-center gap-1 text-[11px] text-snp-navy-600">
                     <Package className="w-3.5 h-3.5" />
                     <span>Min. {minQty} units</span>
                   </div>
@@ -166,11 +166,11 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
 
               {/* Quantity */}
               <Field label="Desired Quantity" required>
-                <p className="text-[12px] text-[#8093a9] -mt-0.5 mb-1.5 leading-relaxed">
+                <p className="text-[12px] text-snp-navy-500 -mt-0.5 mb-1.5 leading-relaxed">
                   A minimum of {minQty} units is required for this product.{' '}
                   <button
                     type="button"
-                    className="text-[#3077c9] hover:underline font-medium"
+                    className="text-snp-indigo-600 hover:underline font-medium"
                     onClick={onTryOnDemand}
                   >
                     Smaller order in mind? Try on-demand swag.
@@ -187,7 +187,7 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
                   }}
                 />
                 {quantity >= minQty && (
-                  <p className="text-[11px] text-[#8093a9] mt-1">
+                  <p className="text-[11px] text-snp-navy-500 mt-1">
                     ~${(product.price * quantity).toLocaleString()} estimated total
                   </p>
                 )}
@@ -204,22 +204,22 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
                       key={opt.value}
                       className={`flex items-start gap-3 p-3.5 rounded-[12px] border cursor-pointer transition-all ${
                         sendMethod === opt.value
-                          ? 'border-[#3077c9] bg-[#f0f6ff]'
-                          : 'border-[#e0ebf7] hover:border-[#b7cfec] bg-white'
+                          ? 'border-snp-indigo-600 bg-snp-indigo-50'
+                          : 'border-snp-navy-200 hover:border-snp-navy-300 bg-white'
                       }`}
                     >
                       <div className="mt-0.5 shrink-0">
                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          sendMethod === opt.value ? 'border-[#3077c9]' : 'border-[#c5d5e8]'
+                          sendMethod === opt.value ? 'border-snp-indigo-600' : 'border-[#c5d5e8]'
                         }`}>
                           {sendMethod === opt.value && (
-                            <div className="w-2 h-2 rounded-full bg-[#3077c9]" />
+                            <div className="w-2 h-2 rounded-full bg-snp-indigo-600" />
                           )}
                         </div>
                       </div>
                       <div className="flex-1" onClick={() => setSendMethod(opt.value)}>
-                        <p className="text-[13px] font-semibold text-[#012754] leading-tight">{opt.label}</p>
-                        <p className="text-[11px] text-[#8093a9] leading-snug mt-0.5">{opt.desc}</p>
+                        <p className="text-[13px] font-semibold text-snp-navy-950 leading-tight">{opt.label}</p>
+                        <p className="text-[11px] text-snp-navy-500 leading-snug mt-0.5">{opt.desc}</p>
                       </div>
                     </label>
                   ))}
@@ -228,22 +228,22 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
             </div>
 
             {/* ── Footer ──────────────────────────────────────────────── */}
-            <div className="px-8 py-5 border-t border-[#e0ebf7] shrink-0">
+            <div className="px-8 py-5 border-t border-snp-navy-200 shrink-0">
               <button
                 onClick={handleSubmit}
                 disabled={!canSubmit}
                 className="w-full h-12 rounded-[12px] text-white text-[14px] font-semibold flex items-center justify-center gap-2 transition-all"
                 style={{
                   background: canSubmit
-                    ? 'linear-gradient(180deg, #5992d4 0%, #3077c9 100%)'
+                    ? '#3077c9'
                     : '#c8d9ed',
                   cursor: canSubmit ? 'pointer' : 'not-allowed',
                 }}
               >
-                Start an order
+                Get a Quote
                 {canSubmit && <ChevronRight className="w-4 h-4" />}
               </button>
-              <p className="text-[11px] text-[#a6b3c3] text-center mt-2.5">
+              <p className="text-[11px] text-snp-navy-400 text-center mt-2.5">
                 Our team will reach out within 1 business day to confirm details.
               </p>
             </div>
@@ -256,18 +256,18 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
             </div>
             <div>
               <h2
-                className="text-[24px] font-semibold text-[#012754] mb-2"
+                className="text-[24px] font-semibold text-snp-navy-950 mb-2"
                 style={{ fontFamily: "'Clash Display', sans-serif" }}
               >
                 Order Request Received!
               </h2>
-              <p className="text-[14px] text-[#59728f] leading-relaxed max-w-[320px]">
-                Our team will reach out to <span className="font-semibold text-[#345276]">{email}</span> within 1 business day to confirm your design and kick off production.
+              <p className="text-[14px] text-snp-navy-600 leading-relaxed max-w-[320px]">
+                Our team will reach out to <span className="font-semibold text-snp-navy-700">{email}</span> within 1 business day to confirm your design and kick off production.
               </p>
             </div>
-            <div className="flex items-center gap-3 bg-[#f5f8fc] rounded-[14px] px-5 py-4 border border-[#e0ebf7] w-full max-w-[320px]">
-              <Clock className="w-4 h-4 text-[#8093a9] shrink-0" />
-              <p className="text-[12px] text-[#59728f] text-left">
+            <div className="flex items-center gap-3 bg-snp-navy-50 rounded-[14px] px-5 py-4 border border-snp-navy-200 w-full max-w-[320px]">
+              <Clock className="w-4 h-4 text-snp-navy-500 shrink-0" />
+              <p className="text-[12px] text-snp-navy-600 text-left">
                 {product.leadTimeDays
                   ? `Estimated lead time: ${product.leadTimeDays} days after approval`
                   : 'Estimated lead time: 14–21 days after design approval'}
@@ -275,7 +275,7 @@ export function CreateOrderModal({ product, onClose, onTryOnDemand }: CreateOrde
             </div>
             <button
               onClick={onClose}
-              className="h-11 px-8 rounded-[12px] border border-[#e0ebf7] text-[14px] font-medium text-[#59728f] hover:bg-[#f5f8fc] transition-colors"
+              className="h-11 px-8 rounded-[12px] border border-snp-navy-200 text-[14px] font-medium text-snp-navy-600 hover:bg-snp-navy-50 transition-colors"
             >
               Done
             </button>

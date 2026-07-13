@@ -1,113 +1,117 @@
-import { useState, useRef } from 'react';
-import { Globe, Upload, Sparkles, Layers, ArrowDown, X, Check } from 'lucide-react';
-import { PRODUCTS, MOCK_COMPANY } from '../data/mockData';
+import { useState } from 'react';
+import { Upload, Sparkles, X, Check, Globe, Loader2, ArrowRight } from 'lucide-react';
+import { PRODUCTS, MOCK_COMPANY, DESIGNS, type Design } from '../data/mockData';
+import { LogoInput, type LogoInputRenderReadyArgs, type BrandDetails } from './LogoInput';
+import { SCORE_LABEL, SCORE_COLORS, SEVERITY_COLORS } from '../utils/logoAnalysis';
+import { useCompanyLogo } from '../context/CompanyLogoContext';
 
 interface LogoHeroProps {
-  onCreateCollection: () => void;
-  onRefineWithAI: (logoUrl: string) => void;
-  onPickAndSend: () => void;
-  onLogoReady?: (logoUrl: string, domain: string) => void;
+  // Catalog variant (default)
+  onCreateCollection?: () => void;
+  onLogoReady?: (logoUrl: string, domain: string, brand: BrandDetails) => void;
+  // Copy overrides for alternate variants
+  badge?: string;
+  headline?: React.ReactNode;
+  // Override the CTA button label (default: "Get started →")
+  ctaLabel?: string;
+  // Override the floating showcase product IDs (default: SHOWCASE_IDS)
+  productIds?: string[];
+  // Override the entire ready state (e.g. Quick Start → single CTA)
+  renderReadyOverride?: (args: LogoInputRenderReadyArgs) => React.ReactNode;
+  // Bypass the in-place loading animation and navigate immediately
+  onImmediateSubmit?: (logoUrl: string, domain: string) => void;
+  // Pre-load the component in the ready state with an existing logo URL
+  initialLogoUrl?: string;
+  // When true, don't fall back to contextLogo if initialLogoUrl is undefined
+  noContextFallback?: boolean;
+  // Active designs to show as quick-select options (defaults to DESIGNS from mockData)
+  designs?: Design[];
 }
 
-type Phase = 'idle' | 'loading' | 'ready' | 'error';
-
-const LOAD_STEPS = [
-  { label: 'Scanning website' },
-  { label: 'Extracting brand assets' },
-  { label: 'Applying to products' },
-  { label: 'All set!' },
-];
-
-const EXAMPLE_DOMAINS = ['stripe.com', 'airbnb.com', 'notion.so'];
 const SHOWCASE_IDS = ['1', '2', '9'];
 
+function ShowcaseImg({ image, className }: { image: string; className: string }) {
+  return image.startsWith('/')
+    ? <img src={image} alt="" className={className} />
+    : <span className="text-[52px] leading-none">{image}</span>;
+}
+
 const SPARKLES = [
-  { size: 13, top: '20%', left: '17%',  color: '#3077c9', delay: '0s',   dur: '2.8s' },
-  { size: 9,  top: '70%', left: '22%',  color: '#7c3aed', delay: '1.1s', dur: '3.3s' },
-  { size: 11, top: '18%', right: '17%', color: '#3077c9', delay: '0.6s', dur: '2.5s' },
-  { size: 7,  top: '74%', right: '19%', color: '#f59e0b', delay: '1.6s', dur: '3.6s' },
-  { size: 8,  top: '48%', left: '11%',  color: '#7c3aed', delay: '0.3s', dur: '4.0s' },
+  { size: 13, top: '20%', left: '17%',  color: 'var(--snp-indigo-600)', delay: '0s',   dur: '2.8s' },
+  { size: 9,  top: '70%', left: '22%',  color: 'var(--snp-purple-700)', delay: '1.1s', dur: '3.3s' },
+  { size: 11, top: '18%', right: '17%', color: 'var(--snp-indigo-600)', delay: '0.6s', dur: '2.5s' },
+  { size: 7,  top: '74%', right: '19%', color: 'var(--snp-amber-500)',  delay: '1.6s', dur: '3.6s' },
+  { size: 8,  top: '48%', left: '11%',  color: 'var(--snp-purple-700)', delay: '0.3s', dur: '4.0s' },
 ] as { size: number; top: string; left?: string; right?: string; color: string; delay: string; dur: string }[];
 
-export function LogoHero({ onCreateCollection, onRefineWithAI, onPickAndSend, onLogoReady }: LogoHeroProps) {
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [domain, setDomain] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
-  const [logoDomain, setLogoDomain] = useState('');
-  const [loadStep, setLoadStep] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const foundUrlRef = useRef<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const showcaseProducts = SHOWCASE_IDS
+export function LogoHero({
+  onCreateCollection, onLogoReady,
+  badge = 'Instant Brand Preview',
+  designs: designsProp,
+  headline = <>See your logo on <span style={{
+    background: 'linear-gradient(90deg, var(--snp-indigo-600) 0%, var(--snp-purple-700) 50%, var(--snp-indigo-600) 100%)',
+    backgroundSize: '200% auto',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    animation: 'lhero-shimmer 3s linear infinite',
+  }}>swag.</span></>,
+  ctaLabel = 'Get started →',
+  productIds,
+
+  renderReadyOverride,
+  onImmediateSubmit,
+  initialLogoUrl,
+  noContextFallback = false,
+}: LogoHeroProps) {
+  const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
+  const [heroBrand, setHeroBrand] = useState<BrandDetails | null>(null);
+  const [domainInput, setDomainInput] = useState('');
+  const { logoUrl: contextLogo, saveLogo, activateBrandSet, clearLogo, allBrandSets } = useCompanyLogo();
+
+  // Show real persisted brand sets if any exist, otherwise fall back to demo designs
+  const activeDesigns: Design[] = allBrandSets.length > 0
+    ? allBrandSets.map(bs => ({ id: bs.id, name: bs.companyName || 'My Brand', logoUrl: bs.logoUrl, productIds: [], createdAt: bs.createdAt, updatedAt: bs.createdAt }))
+    : (designsProp ?? DESIGNS);
+
+  // Use prop override if provided; fall back to context only when allowed
+  const effectiveInitialUrl = noContextFallback ? initialLogoUrl : (initialLogoUrl ?? contextLogo ?? undefined);
+
+  // Auto-save to context when a logo becomes ready
+  function handleLogoReady(url: string, d: string, brand: BrandDetails) {
+    saveLogo(url);
+    setHeroBrand(brand);
+    onLogoReady?.(url, d, brand);
+  }
+
+  function handleDesignSelect(design: Design) {
+    setSelectedDesignId(design.id);
+    // If this is a persisted brand set, restore it; otherwise treat as a new logo
+    const isRealBrandSet = allBrandSets.some(bs => bs.id === design.id);
+    if (isRealBrandSet) {
+      activateBrandSet(design.id);
+      setHeroBrand({ companyName: design.name, brandColor: null, description: null });
+      onLogoReady?.(design.logoUrl ?? '', design.name, { companyName: design.name, brandColor: null, description: null });
+    } else {
+      handleLogoReady(design.logoUrl ?? '', design.name, { companyName: design.name, brandColor: null, description: null });
+    }
+  }
+
+  // Auto-save to context on immediate submit (bypasses loading animation)
+  function handleImmediateSubmit(url: string, domain: string) {
+    saveLogo(url);
+    onImmediateSubmit?.(url, domain);
+  }
+
+  const showcaseProducts = (productIds ?? SHOWCASE_IDS)
+    .slice(0, 2)
     .map(id => PRODUCTS.find(p => p.id === id))
     .filter(Boolean) as typeof PRODUCTS;
 
-  const runLoadAnimation = (durationMs: number, onComplete: () => void) => {
-    setLoadStep(0);
-    setProgress(5);
-    const stepDuration = durationMs / LOAD_STEPS.length;
-    for (let i = 0; i < LOAD_STEPS.length; i++) {
-      setTimeout(() => {
-        setLoadStep(i);
-        setProgress(Math.round(((i + 1) / LOAD_STEPS.length) * 100));
-      }, i * stepDuration);
-    }
-    setTimeout(onComplete, durationMs);
-  };
-
-  const startFetch = (d: string) => {
-    const clean = d.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-    if (!clean) return;
-    foundUrlRef.current = null;
-    setPhase('loading');
-    const url = `https://logo.clearbit.com/${clean}`;
-    const img = new window.Image();
-    img.onload = () => { foundUrlRef.current = url; };
-    img.src = url;
-    runLoadAnimation(2800, () => {
-      if (foundUrlRef.current) {
-        setLogoUrl(foundUrlRef.current);
-        setLogoDomain(clean);
-        setPhase('ready');
-        onLogoReady?.(foundUrlRef.current, clean);
-      } else {
-        setPhase('error');
-      }
-    });
-  };
-
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = evt => {
-      const dataUrl = evt.target?.result as string;
-      foundUrlRef.current = dataUrl;
-      setPhase('loading');
-      runLoadAnimation(2400, () => {
-        setLogoUrl(dataUrl);
-        setLogoDomain('your file');
-        setPhase('ready');
-        onLogoReady?.(dataUrl, 'your file');
-      });
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const reset = () => {
-    setPhase('idle');
-    setLogoUrl('');
-    setLogoDomain('');
-    setDomain('');
-    setLoadStep(0);
-    setProgress(0);
-    foundUrlRef.current = null;
-  };
-
   return (
     <div
-      className="relative overflow-hidden border-b border-[#e0ebf7]"
+      className="relative overflow-hidden border-b border-snp-navy-200"
       style={{ background: 'linear-gradient(150deg, #eef4ff 0%, #f9fbff 55%, #f2eeff 100%)' }}
     >
       {/* ── CSS keyframe animations ── */}
@@ -176,356 +180,318 @@ export function LogoHero({ onCreateCollection, onRefineWithAI, onPickAndSend, on
       ))}
 
       <div className="relative max-w-[1400px] mx-auto px-4 md:px-[120px]">
+        <LogoInput
+          onReady={(url, d) => { saveLogo(url); onLogoReady?.(url, d, heroBrand ?? { companyName: d, brandColor: null, description: null }); }}
+          onImmediateSubmit={onImmediateSubmit ? handleImmediateSubmit : undefined}
+          onPhaseChange={(phase) => { if (phase === 'idle') { clearLogo(); setHeroBrand(null); } }}
+          initialLogoUrl={effectiveInitialUrl}
+          renderIdle={({ triggerFileInput, fetchFromDomain, isFetchingDomain }) => (
+            <div className="flex items-center gap-4 py-5 md:py-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-        {/* ── IDLE STATE ────────────────────────────────────────────── */}
-        {phase === 'idle' && (
-          <div className="flex items-center gap-4 py-5 md:py-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-
-            {/* Left floating product card */}
-            <div className="hidden xl:flex items-center justify-end w-[150px] shrink-0 pr-2">
-              <div style={{ animation: 'lhero-float-a 4s ease-in-out infinite' }}>
-                {showcaseProducts[0] && (
-                  <div className="relative w-[118px] h-[138px] bg-white rounded-[18px] overflow-hidden border border-[#e0ecfb] shadow-[0_16px_48px_rgba(48,119,201,0.13),0_2px_8px_rgba(48,119,201,0.06)]">
-                    <img src={showcaseProducts[0].image} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-full px-1.5 py-0.5 shadow-sm border border-[#e8f0fb] whitespace-nowrap">
-                      <span className="text-[6px] font-black tracking-widest leading-none" style={{ color: MOCK_COMPANY.logoColor }}>
-                        {MOCK_COMPANY.logo}
-                      </span>
+              {/* Left floating product card */}
+              <div className="hidden xl:flex items-center justify-end w-[150px] shrink-0 pr-2">
+                <div style={{ animation: 'lhero-float-a 4s ease-in-out infinite' }}>
+                  {showcaseProducts[0] && (
+                    <div className="relative w-[118px] h-[138px] bg-white rounded-[18px] overflow-hidden border border-[#e0ecfb] shadow-[0_16px_48px_rgba(48,119,201,0.13),0_2px_8px_rgba(48,119,201,0.06)]">
+                      <ShowcaseImg image={showcaseProducts[0].image} className="w-full h-full object-contain p-3" />
+                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-full px-1.5 py-0.5 shadow-sm border border-[#e8f0fb] whitespace-nowrap">
+                        <span className="text-[6px] font-black tracking-widest leading-none" style={{ color: MOCK_COMPANY.logoColor }}>
+                          {MOCK_COMPANY.logo}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Center content */}
-            <div className="flex-1 min-w-0 text-center">
-
-              {/* Badge */}
-              <div
-                className="inline-flex items-center gap-2 bg-[#eaf1fa] border border-[#c8dff0] rounded-full px-3.5 py-1.5 mb-3"
-                style={{
-                  animation: 'lhero-fade-up 0.4s ease both, lhero-badge-glow 2.5s ease-in-out infinite 0.8s',
-                }}
-              >
-                <Sparkles className="w-3 h-3 text-[#3077c9]" />
-                <span className="text-[10px] font-bold text-[#3077c9] uppercase tracking-[0.18em]">
-                  Instant Brand Preview
-                </span>
+                  )}
+                </div>
               </div>
 
-              {/* Headline */}
-              <h2
-                className="text-[26px] md:text-[32px] font-bold text-[#012754] leading-tight mb-2.5"
-                style={{
-                  fontFamily: "'Clash Display', 'DM Sans', sans-serif",
-                  animation: 'lhero-fade-up 0.4s ease 0.1s both',
-                }}
-              >
-                See your logo on{' '}
-                <span
+              {/* Center content */}
+              <div className="flex-1 min-w-0 text-center">
+                {/* Badge */}
+                <div
+                  className="inline-flex items-center gap-2 bg-snp-navy-100 border border-[#c8dff0] rounded-full px-3.5 py-1.5 mb-3"
                   style={{
-                    background: 'linear-gradient(90deg, #3077c9 0%, #7c3aed 50%, #3077c9 100%)',
-                    backgroundSize: '200% auto',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text',
-                    animation: 'lhero-shimmer 3s linear infinite',
+                    animation: 'lhero-fade-up 0.4s ease both, lhero-badge-glow 2.5s ease-in-out infinite 0.8s',
                   }}
                 >
-                  swag.
-                </span>
-              </h2>
+                  <Sparkles className="w-3 h-3 text-snp-indigo-600" />
+                  <span className="text-[10px] font-bold text-snp-indigo-600 uppercase tracking-[0.18em]">
+                    {badge}
+                  </span>
+                </div>
 
-              {/* On-demand benefits */}
-              <div
-                className="flex items-center justify-center gap-2 flex-wrap mb-3"
-                style={{ animation: 'lhero-fade-up 0.4s ease 0.15s both' }}
-              >
-                {[
-                  'Order 1 or 10,000 — you decide',
-                  'Expert design support for bulk orders',
-                  'Shipped worldwide',
-                ].map(label => (
-                  <div
-                    key={label}
-                    className="inline-flex items-center gap-1.5 bg-white rounded-full border border-[#e0ebf7] px-2.5 py-1"
-                    style={{ boxShadow: '0 1px 4px rgba(48,119,201,0.06)' }}
-                  >
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#dcfce7] flex items-center justify-center shrink-0">
-                      <svg width="7" height="6" viewBox="0 0 7 6" fill="none">
-                        <path d="M1 3L2.8 5L6 1" stroke="#22c55e" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <span className="text-[11px] font-medium text-[#59728f] whitespace-nowrap">{label}</span>
-                  </div>
-                ))}
-              </div>
+                {/* Headline */}
+                <h2
+                  className="text-[26px] md:text-[32px] font-bold text-snp-navy-950 leading-tight mb-2.5"
+                  style={{
+                    fontFamily: "'Clash Display', 'DM Sans', sans-serif",
+                    animation: 'lhero-fade-up 0.4s ease 0.1s both',
+                  }}
+                >
+                  {headline}
+                </h2>
 
-              {/* Input row */}
-              <div
-                className="flex gap-2 mb-2 max-w-[440px] mx-auto"
-                style={{ animation: 'lhero-fade-up 0.4s ease 0.25s both' }}
-              >
-                <div className="relative flex-1">
-                  <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8093a9]" />
+                {/* Primary — domain input */}
+                <div
+                  className="flex items-center h-[44px] rounded-[12px] border bg-white overflow-hidden transition-all focus-within:border-snp-indigo-400 focus-within:shadow-[0_0_0_3px_rgba(48,119,201,0.12)]"
+                  style={{ borderColor: '#c7daf5', animation: 'lhero-fade-up 0.4s ease 0.15s both', boxShadow: '0 2px 10px rgba(48,119,201,0.10)' }}
+                >
+                  <Globe className="w-3.5 h-3.5 text-snp-navy-400 ml-3 shrink-0" />
                   <input
                     type="text"
-                    value={domain}
-                    onChange={e => setDomain(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && domain.trim() && startFetch(domain)}
                     placeholder="yourcompany.com"
-                    className="w-full h-[44px] pl-10 pr-4 rounded-[12px] text-[14px] text-[#012754] placeholder:text-[#b7cfec] focus:outline-none transition-all bg-white"
-                    style={{ border: '1.5px solid #e0ebf7', boxShadow: '0 2px 8px rgba(48,119,201,0.06)' }}
-                    onFocus={e => {
-                      e.currentTarget.style.borderColor = '#3077c9';
-                      e.currentTarget.style.boxShadow = '0 0 0 4px rgba(48,119,201,0.10), 0 2px 8px rgba(48,119,201,0.06)';
-                    }}
-                    onBlur={e => {
-                      e.currentTarget.style.borderColor = '#e0ebf7';
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(48,119,201,0.06)';
-                    }}
+                    value={domainInput}
+                    onChange={e => setDomainInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') fetchFromDomain(domainInput); }}
+                    className="h-full px-2.5 text-[13px] text-snp-navy-900 placeholder-snp-navy-300 outline-none bg-transparent w-[175px]"
                   />
-                </div>
-                <button
-                  onClick={() => domain.trim() && startFetch(domain)}
-                  disabled={!domain.trim()}
-                  className="h-[44px] px-5 rounded-[12px] text-[13px] font-bold text-white shrink-0 transition-all"
-                  style={{
-                    background: domain.trim()
-                      ? 'linear-gradient(180deg, #5992d4 0%, #3077c9 100%)'
-                      : '#d4e3f5',
-                    boxShadow: domain.trim() ? '0 4px 14px rgba(48,119,201,0.28)' : 'none',
-                  }}
-                >
-                  Preview →
-                </button>
-              </div>
-
-              {/* Upload + examples */}
-              <div
-                className="flex items-center justify-center gap-3 flex-wrap"
-                style={{ animation: 'lhero-fade-up 0.4s ease 0.35s both' }}
-              >
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-[#8093a9] hover:text-[#3077c9] transition-colors"
-                >
-                  <Upload className="w-3 h-3" /> Upload logo
-                </button>
-                <span className="text-[#d0dae6] select-none">·</span>
-                <span className="text-[11px] text-[#a6b3c3]">Try:</span>
-                {EXAMPLE_DOMAINS.map(d => (
                   <button
-                    key={d}
-                    onClick={() => { setDomain(d); startFetch(d); }}
-                    className="text-[11px] font-medium text-[#59728f] bg-white rounded-full px-2.5 py-0.5 border border-[#e0ebf7] hover:border-[#3077c9] hover:text-[#3077c9] transition-all"
-                    style={{ boxShadow: '0 1px 4px rgba(48,119,201,0.06)' }}
+                    onClick={() => fetchFromDomain(domainInput)}
+                    disabled={!domainInput.trim() || isFetchingDomain}
+                    className="h-full px-4 flex items-center gap-1.5 text-[13px] font-semibold text-white transition-all border-l border-[#c7daf5] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    style={{ background: '#3077c9' }}
                   >
-                    {d}
+                    {isFetchingDomain
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <><ArrowRight className="w-4 h-4" /> Fetch logo</>
+                    }
                   </button>
-                ))}
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-              </div>
-            </div>
+                </div>
 
-            {/* Right floating product card */}
-            <div className="hidden xl:flex items-center justify-start w-[150px] shrink-0 pl-2">
-              <div style={{ animation: 'lhero-float-b 3.6s ease-in-out infinite 0.9s' }}>
-                {showcaseProducts[1] && (
-                  <div className="relative w-[106px] h-[124px] bg-white rounded-[16px] overflow-hidden border border-[#ede8f7] shadow-[0_16px_40px_rgba(124,58,237,0.11),0_2px_8px_rgba(124,58,237,0.06)]">
-                    <img src={showcaseProducts[1].image} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-full px-1.5 py-0.5 shadow-sm border border-[#ede8f7] whitespace-nowrap">
-                      <span className="text-[6px] font-black tracking-widest leading-none" style={{ color: MOCK_COMPANY.logoColor }}>
-                        {MOCK_COMPANY.logo}
-                      </span>
+                {/* Secondary — upload link */}
+                <button
+                  onClick={triggerFileInput}
+                  className="flex items-center gap-1.5 text-[12px] font-medium text-snp-navy-400 hover:text-snp-indigo-600 transition-colors"
+                  style={{ animation: 'lhero-fade-up 0.4s ease 0.20s both' }}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  or upload a file
+                </button>
+
+                {/* Saved designs quick-select */}
+                {activeDesigns.length > 0 && (
+                  <div
+                    className="mt-4"
+                    style={{ animation: 'lhero-fade-up 0.4s ease 0.42s both' }}
+                  >
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <div className="h-px w-12 bg-snp-navy-200" />
+                      <span className="text-[11px] text-snp-navy-400 font-medium whitespace-nowrap">or pick an existing brand</span>
+                      <div className="h-px w-12 bg-snp-navy-200" />
+                    </div>
+                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                      {activeDesigns.map(design => {
+                        const isSelected = selectedDesignId === design.id;
+                        return (
+                          <button
+                            key={design.id}
+                            onClick={() => handleDesignSelect(design)}
+                            className="flex flex-col items-center gap-1.5 group"
+                          >
+                            <div
+                              className={`w-12 h-12 rounded-[14px] bg-snp-navy-100 flex items-center justify-center overflow-hidden transition-all border-2 relative ${
+                                isSelected
+                                  ? 'border-snp-indigo-600 shadow-[0_0_0_3px_rgba(48,119,201,0.15)]'
+                                  : 'border-snp-navy-200 hover:border-snp-indigo-600 hover:shadow-[0_0_0_3px_rgba(48,119,201,0.10)]'
+                              }`}
+                              style={{ boxShadow: isSelected ? '0 0 0 3px rgba(48,119,201,0.15)' : undefined }}
+                            >
+                              <span className="text-[12px] font-bold text-snp-navy-400 select-none">
+                                {design.name.charAt(0).toUpperCase()}
+                              </span>
+                              <img
+                                src={design.logoUrl ?? ''}
+                                alt={design.name}
+                                className="absolute inset-0 w-full h-full object-contain p-2 bg-white"
+                                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-medium transition-colors leading-none ${isSelected ? 'text-snp-indigo-600' : 'text-snp-navy-500 group-hover:text-snp-indigo-600'}`}>
+                              {design.name}
+                            </span>
+                            {isSelected && (
+                              <div className="flex items-center gap-0.5">
+                                <div className="w-1 h-1 rounded-full bg-snp-indigo-600" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* ── LOADING STATE ─────────────────────────────────────────── */}
-        {phase === 'loading' && (
-          <div className="flex flex-col items-center justify-center py-8 md:py-10" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            {/* Progress ring */}
-            <div className="relative w-20 h-20 mb-6">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 80 80">
-                <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(48,119,201,0.12)" strokeWidth="6" />
-                <circle
-                  cx="40" cy="40" r="34"
-                  fill="none"
-                  stroke="#3077c9"
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 34}`}
-                  strokeDashoffset={`${2 * Math.PI * 34 * (1 - progress / 100)}`}
-                  style={{ transition: 'stroke-dashoffset 0.6s ease' }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[13px] font-bold text-[#3077c9]">{progress}%</span>
+              {/* Right floating product card */}
+              <div className="hidden xl:flex items-center justify-start w-[150px] shrink-0 pl-2">
+                <div style={{ animation: 'lhero-float-b 3.6s ease-in-out infinite 0.9s' }}>
+                  {showcaseProducts[1] && (
+                    <div className="relative w-[106px] h-[124px] bg-white rounded-[16px] overflow-hidden border border-[#ede8f7] shadow-[0_16px_40px_rgba(124,58,237,0.11),0_2px_8px_rgba(124,58,237,0.06)]">
+                      <ShowcaseImg image={showcaseProducts[1].image} className="w-full h-full object-contain p-3" />
+                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-full px-1.5 py-0.5 shadow-sm border border-[#ede8f7] whitespace-nowrap">
+                        <span className="text-[6px] font-black tracking-widest leading-none" style={{ color: MOCK_COMPANY.logoColor }}>
+                          {MOCK_COMPANY.logo}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+          )}
+          renderReady={renderReadyOverride ?? (({ logoUrl: readyLogoUrl, brand: readyBrand, onReset, analysis }) => {
+            // Sync brand details into hero state when they arrive
+            if (readyBrand.companyName && readyBrand !== heroBrand) setHeroBrand(readyBrand);
+            return (
+            <div className="flex items-center gap-4 py-5 md:py-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-            <h3
-              className="text-[22px] font-bold text-[#012754] mb-1.5"
-              style={{ fontFamily: "'Clash Display', sans-serif" }}
-            >
-              {LOAD_STEPS[Math.min(loadStep, LOAD_STEPS.length - 1)].label}
-            </h3>
-            <p className="text-[13px] text-[#8093a9] mb-8">This takes just a moment...</p>
-
-            {/* Step list */}
-            <div className="flex flex-col gap-2 w-full max-w-[260px]">
-              {LOAD_STEPS.map((step, i) => {
-                const done   = i < loadStep;
-                const active = i === loadStep;
-                return (
-                  <div key={step.label} className="flex items-center gap-3">
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all"
-                      style={{
-                        background: done ? '#3077c9' : active ? 'rgba(48,119,201,0.12)' : '#f0f4f8',
-                        border: active ? '1.5px solid #3077c9' : done ? 'none' : '1.5px solid #e0ebf7',
-                      }}
-                    >
-                      {done   && <Check className="w-2.5 h-2.5 text-white" />}
-                      {active && <div className="w-1.5 h-1.5 rounded-full bg-[#3077c9] animate-pulse" />}
+              {/* Left floating product card — mirrors idle */}
+              <div className="hidden xl:flex items-center justify-end w-[150px] shrink-0 pr-2">
+                <div style={{ animation: 'lhero-float-a 4s ease-in-out infinite' }}>
+                  {showcaseProducts[0] && (
+                    <div className="relative w-[118px] h-[138px] bg-white rounded-[18px] overflow-hidden border border-[#e0ecfb] shadow-[0_16px_48px_rgba(48,119,201,0.13),0_2px_8px_rgba(48,119,201,0.06)]">
+                      <ShowcaseImg image={showcaseProducts[0].image} className="w-full h-full object-contain p-3" />
+                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-lg px-1 py-0.5 shadow-sm border border-[#e8f0fb] flex items-center justify-center" style={{ minWidth: 28 }}>
+                        <img src={readyLogoUrl} alt="" className="h-3 w-auto object-contain max-w-[36px]" />
+                      </div>
                     </div>
-                    <span
-                      className="text-[12px] font-medium"
-                      style={{ color: done ? '#3077c9' : active ? '#012754' : '#a6b3c3' }}
-                    >
-                      {step.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── ERROR STATE ───────────────────────────────────────────── */}
-        {phase === 'error' && (
-          <div className="flex flex-col items-center justify-center py-7 text-center" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            <div className="w-12 h-12 rounded-full bg-[#fef2f2] border border-[#fecaca] flex items-center justify-center mb-3">
-              <X className="w-5 h-5 text-[#ef4444]" />
-            </div>
-            <h3 className="text-[16px] font-bold text-[#012754] mb-1">Logo not found</h3>
-            <p className="text-[13px] text-[#8093a9] mb-5 max-w-[260px]">
-              We couldn't find a logo for "{domain}". Try a different domain or upload your file.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={reset}
-                className="h-9 px-5 rounded-[10px] border border-[#e0ebf7] text-[#59728f] text-[13px] font-semibold hover:bg-[#f5f8fc] transition-colors"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="h-9 px-5 rounded-[10px] text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ background: 'linear-gradient(180deg, #5992d4 0%, #3077c9 100%)' }}
-              >
-                Upload Logo
-              </button>
-            </div>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-          </div>
-        )}
-
-        {/* ── READY STATE ───────────────────────────────────────────── */}
-        {phase === 'ready' && (
-          <div className="py-4 md:py-5" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-
-            {/* Logo confirmation strip */}
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 bg-white rounded-[10px] border border-[#e0ebf7] shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
-                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#22c55e] flex items-center justify-center">
-                      <Check className="w-2.5 h-2.5 text-white" />
-                    </div>
-                    <span className="text-[10px] font-bold text-[#22c55e] uppercase tracking-widest">Logo ready</span>
-                  </div>
-                  <span className="text-[13px] font-semibold text-[#012754]">{logoDomain}</span>
+                  )}
                 </div>
               </div>
-              <button
-                onClick={reset}
-                className="flex items-center gap-1.5 text-[11px] font-medium text-[#8093a9] hover:text-[#3077c9] transition-colors shrink-0"
-              >
-                <X className="w-3.5 h-3.5" /> Change
-              </button>
+
+              {/* Center — logo display + actions */}
+              <div className="flex-1 min-w-0 flex flex-col items-center gap-4 text-center">
+
+                {/* Badge */}
+                <div
+                  className="inline-flex items-center gap-2 bg-snp-navy-100 border border-[#c8dff0] rounded-full px-3.5 py-1.5"
+                  style={{ animation: 'lhero-fade-up 0.35s ease both' }}
+                >
+                  <Sparkles className="w-3 h-3 text-snp-indigo-600" />
+                  <span className="text-[10px] font-bold text-snp-indigo-600 uppercase tracking-[0.18em]">{badge}</span>
+                </div>
+
+                {/* Logo card */}
+                <div className="relative" style={{ animation: 'lhero-fade-up 0.35s ease 0.08s both' }}>
+                  <div className="w-[100px] h-[100px] bg-white rounded-[22px] border-2 border-snp-navy-200 shadow-[0_16px_40px_rgba(48,119,201,0.14),0_2px_8px_rgba(48,119,201,0.06)] flex items-center justify-center overflow-hidden">
+                    <img src={readyLogoUrl} alt="Logo" className="w-full h-full object-contain p-4" />
+                  </div>
+                  <div className="absolute -bottom-2.5 -right-2.5 w-8 h-8 rounded-full bg-[#22c55e] border-2 border-white flex items-center justify-center shadow-md">
+                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                  </div>
+                </div>
+
+                {/* Quality analysis panel */}
+                {analysis && (
+                  <div
+                    className="flex flex-col items-center gap-2"
+                    style={{ animation: 'lhero-fade-up 0.35s ease 0.11s both' }}
+                  >
+                    {/* Score row */}
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      {/* Score pill */}
+                      <div
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border"
+                        style={{
+                          background: SCORE_COLORS[analysis.score].bg,
+                          color: SCORE_COLORS[analysis.score].text,
+                          borderColor: SCORE_COLORS[analysis.score].border,
+                        }}
+                      >
+                        <div
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ background: SCORE_COLORS[analysis.score].dot }}
+                        />
+                        {SCORE_LABEL[analysis.score]} quality
+                      </div>
+
+                      {/* File type badge */}
+                      <div className="px-2 py-1 rounded-full text-[10px] font-semibold bg-snp-navy-100 text-snp-navy-500 border border-snp-navy-200 uppercase tracking-wide">
+                        {analysis.fileType === 'svg' ? 'SVG · Vector' : `${analysis.fileType.toUpperCase()} · ${analysis.width}×${analysis.height}px`}
+                      </div>
+                    </div>
+
+                    {/* Issue chips — errors + warnings only, max 2 */}
+                    {analysis.issues.filter(i => i.severity !== 'info').slice(0, 2).length > 0 && (
+                      <div className="flex flex-col items-center gap-1 w-full max-w-[320px]">
+                        {analysis.issues.filter(i => i.severity !== 'info').slice(0, 2).map((issue, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-start gap-2 w-full px-3 py-2 rounded-[10px] border text-left"
+                            style={{
+                              background: SEVERITY_COLORS[issue.severity].bg,
+                              borderColor: SEVERITY_COLORS[issue.severity].border,
+                            }}
+                          >
+                            <span
+                              className="text-[11px] font-bold shrink-0 mt-px"
+                              style={{ color: SEVERITY_COLORS[issue.severity].text }}
+                            >
+                              {SEVERITY_COLORS[issue.severity].icon}
+                            </span>
+                            <div>
+                              <p
+                                className="text-[11px] font-semibold leading-tight"
+                                style={{ color: SEVERITY_COLORS[issue.severity].text }}
+                              >
+                                {issue.title}
+                              </p>
+                              <p className="text-[10px] text-snp-navy-500 leading-snug mt-0.5">
+                                {issue.detail}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Headline */}
+                <div style={{ animation: 'lhero-fade-up 0.35s ease 0.14s both' }}>
+                  <h2
+                    className="text-[22px] md:text-[26px] font-bold text-snp-navy-950 leading-tight"
+                    style={{ fontFamily: "'Clash Display', 'DM Sans', sans-serif" }}
+                  >
+                    {headline}
+                  </h2>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col items-center gap-2" style={{ animation: 'lhero-fade-up 0.35s ease 0.20s both' }}>
+                  <button
+                    onClick={onCreateCollection}
+                    className="h-11 px-8 rounded-[14px] text-white text-[14px] font-semibold hover:opacity-90 transition-opacity"
+                    style={{ background: '#3077c9', boxShadow: '0 4px 14px rgba(48,119,201,0.30)' }}
+                  >
+                    {ctaLabel}
+                  </button>
+                  <button
+                    onClick={onReset}
+                    className="flex items-center gap-1 text-[12px] font-medium text-snp-navy-500 hover:text-snp-indigo-600 transition-colors"
+                  >
+                    <X className="w-3 h-3" /> Change logo
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Right floating product card — mirrors idle */}
+              <div className="hidden xl:flex items-center justify-start w-[150px] shrink-0 pl-2">
+                <div style={{ animation: 'lhero-float-b 3.6s ease-in-out infinite 0.9s' }}>
+                  {showcaseProducts[1] && (
+                    <div className="relative w-[106px] h-[124px] bg-white rounded-[16px] overflow-hidden border border-[#ede8f7] shadow-[0_16px_40px_rgba(124,58,237,0.11),0_2px_8px_rgba(124,58,237,0.06)]">
+                      <ShowcaseImg image={showcaseProducts[1].image} className="w-full h-full object-contain p-3" />
+                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 bg-white/95 rounded-lg px-1 py-0.5 shadow-sm border border-[#ede8f7] flex items-center justify-center" style={{ minWidth: 24 }}>
+                        <img src={readyLogoUrl} alt="" className="h-2.5 w-auto object-contain max-w-[30px]" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
-
-            {/* 3 Action cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-
-              {/* Create Collection */}
-              <button
-                onClick={onCreateCollection}
-                className="group text-left bg-white rounded-[16px] p-4 border border-[#e0ebf7] hover:border-[#3077c9] hover:shadow-[0_8px_24px_rgba(48,119,201,0.12)] transition-all"
-              >
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-7 h-7 rounded-[8px] bg-[#eaf1fa] border border-[#c8dff0] flex items-center justify-center shrink-0">
-                    <Layers style={{ width: 14, height: 14 }} className="text-[#3077c9]" />
-                  </div>
-                  <p className="text-[13px] font-bold text-[#012754]">Create a Swag Collection</p>
-                </div>
-                <p className="text-[11px] text-[#8093a9] leading-relaxed mb-2">
-                  Let recipients choose their favorite branded item
-                </p>
-                <div className="flex items-center gap-1 text-[#3077c9] text-[10px] font-semibold">
-                  Get started <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
-                </div>
-              </button>
-
-              {/* Refine with AI */}
-              <button
-                onClick={() => onRefineWithAI(logoUrl)}
-                className="group text-left bg-white rounded-[16px] p-4 border border-[#e0ebf7] hover:border-[#7c3aed] hover:shadow-[0_8px_24px_rgba(124,58,237,0.12)] transition-all"
-              >
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-7 h-7 rounded-[8px] bg-[#f5f3ff] border border-[#e0d9f7] flex items-center justify-center shrink-0">
-                    <Sparkles style={{ width: 14, height: 14 }} className="text-[#7c3aed]" />
-                  </div>
-                  <p className="text-[13px] font-bold text-[#012754]">Refine with AI</p>
-                </div>
-                <p className="text-[11px] text-[#8093a9] leading-relaxed mb-2">
-                  Personalize colors, placement, and style with AI
-                </p>
-                <div className="flex items-center gap-1 text-[#7c3aed] text-[10px] font-semibold">
-                  Open AI studio <span className="group-hover:translate-x-1 transition-transform inline-block">→</span>
-                </div>
-              </button>
-
-              {/* Browse catalog */}
-              <button
-                onClick={onPickAndSend}
-                className="group text-left bg-white rounded-[16px] p-4 border border-[#e0ebf7] hover:border-[#059669] hover:shadow-[0_8px_24px_rgba(5,150,105,0.10)] transition-all"
-              >
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-7 h-7 rounded-[8px] bg-[#f0fdf4] border border-[#bbf7d0] flex items-center justify-center shrink-0">
-                    <ArrowDown style={{ width: 14, height: 14 }} className="text-[#059669]" />
-                  </div>
-                  <p className="text-[13px] font-bold text-[#012754]">Pick &amp; Send an Item</p>
-                </div>
-                <p className="text-[11px] text-[#8093a9] leading-relaxed mb-2">
-                  Browse the catalog and choose something specific
-                </p>
-                <div className="flex items-center gap-1 text-[#059669] text-[10px] font-semibold">
-                  Browse catalog <span className="group-hover:translate-x-1 transition-transform inline-block">↓</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
+          ); })}
+        />
       </div>
     </div>
   );

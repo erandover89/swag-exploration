@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <rect width="800" height="200" fill="white"/>
+  <text
+    x="400"
+    y="142"
+    font-family="'Georgia', 'Times New Roman', serif"
+    font-size="96"
+    font-weight="700"
+    fill="#1f1f1f"
+    text-anchor="middle"
+    letter-spacing="8"
+  >MOLESKINE</text>
+</svg>

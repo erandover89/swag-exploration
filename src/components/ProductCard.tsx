@@ -1,24 +1,28 @@
-import { Sparkles, Package } from 'lucide-react';
-import { type Product, MOCK_COMPANY } from '../data/mockData';
-import { AddToCollectionMenu } from './AddToCollectionMenu';
+import { useState } from 'react';
+import { type Product, PRINT_TECHNIQUE_CHIPS } from '../data/mockData';
+import { useCompanyLogo } from '../context/CompanyLogoContext';
 
 interface ProductCardProps {
   product: Product;
   onClick?: () => void;
-  onDesign?: () => void;
-  onRefineWithAI?: () => void;
 }
 
 function ProductMedia({ src, alt }: { src: string; alt: string }) {
   if (src.startsWith('/')) {
-    return <img src={src} alt={alt} className="w-full h-full object-cover" />;
+    return <img src={src} alt={alt} className="max-h-[186px] w-auto max-w-full object-contain" style={{ mixBlendMode: 'multiply' }} />;
   }
   return <span className="text-[100px] select-none" style={{ lineHeight: 1 }}>{src}</span>;
 }
 
-export function ProductCard({ product, onClick, onDesign: _onDesign, onRefineWithAI }: ProductCardProps) {
+export function ProductCard({ product, onClick }: ProductCardProps) {
   const isPhoto = product.image.startsWith('/');
   const isBulk  = product.type === 'bulk';
+  const { logoUrl, isApplying } = useCompanyLogo();
+  const [hoveredColor, setHoveredColor] = useState<string | null>(null);
+
+  // Only show the print-area overlay for photo, non-bulk products with a defined print area
+  const hasPrintArea = isPhoto && !isBulk && !!product.printArea;
+  const showLogoOverlay = hasPrintArea && !!logoUrl && !isApplying;
 
   return (
     <div
@@ -27,54 +31,109 @@ export function ProductCard({ product, onClick, onDesign: _onDesign, onRefineWit
       style={{ fontFamily: "'DM Sans', sans-serif" }}
     >
       {/* Image area */}
-      <div className={`relative bg-[#f5f8fc] rounded-[16px] overflow-hidden flex items-center justify-center ${isPhoto ? 'h-[260px]' : 'py-[72px] px-8'}`}>
+      <div className="relative bg-[#f5f8fc] rounded-[16px] overflow-hidden flex items-center justify-center py-[72px] px-8">
         {isPhoto ? (
           <>
             <ProductMedia src={product.image} alt={product.name} />
-            {/* Logo badge */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-[#e0ebf7] rounded-lg px-2.5 py-1 flex items-center gap-1.5 shadow-sm whitespace-nowrap">
-              <span className="text-[9px] font-black tracking-widest leading-none" style={{ color: MOCK_COMPANY.logoColor }}>
-                {MOCK_COMPANY.logo}
-              </span>
-              <span className="text-[9px] text-[#8093a9]">branded</span>
-            </div>
+
+            {/* ── Logo print-area overlay ──────────────────────────────────── */}
+            {showLogoOverlay && product.printArea && (
+              product.printArea.style === 'badge' ? (
+                <div
+                  className="absolute pointer-events-none flex items-center justify-center rounded-xl bg-white/85 shadow-sm p-1.5"
+                  style={{
+                    left: `${product.printArea.x}%`,
+                    top: `${product.printArea.y}%`,
+                    width: `${product.printArea.width}%`,
+                    height: `${product.printArea.height}%`,
+                  }}
+                >
+                  <img src={logoUrl} alt="" className="max-w-full max-h-full object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+                </div>
+              ) : (
+                <img
+                  src={logoUrl}
+                  alt=""
+                  className="absolute pointer-events-none object-contain"
+                  style={{
+                    left: `${product.printArea.x}%`,
+                    top: `${product.printArea.y}%`,
+                    width: `${product.printArea.width}%`,
+                    height: `${product.printArea.height}%`,
+                    mixBlendMode: 'multiply',
+                    opacity: 0.88,
+                  }}
+                  onError={e => (e.currentTarget.style.display = 'none')}
+                />
+              )
+            )}
+
+
+{/* ── Branded badge — only when a logo is active ── */}
+            {!isBulk && !hasPrintArea && !!logoUrl && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-snp-navy-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+                <img src={logoUrl} alt="" className="h-3.5 w-auto object-contain max-w-[40px]" onError={e => (e.currentTarget.style.display = 'none')} />
+                <span className="text-[9px] text-snp-navy-500">branded</span>
+              </div>
+            )}
           </>
         ) : (
           <div className="relative flex flex-col items-center">
             <ProductMedia src={product.image} alt={product.name} />
-            {!isBulk && (
-              <div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-3 text-xs font-black tracking-widest opacity-80"
-                style={{ color: MOCK_COMPANY.logoColor }}
-              >
-                {MOCK_COMPANY.logo}
-              </div>
+            {!isBulk && !!logoUrl && (
+              <img
+                src={logoUrl}
+                alt=""
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-3 h-5 w-auto object-contain max-w-[48px] opacity-80"
+                onError={e => (e.currentTarget.style.display = 'none')}
+              />
             )}
           </div>
         )}
 
-        {/* Tags – top left (POPULAR, SUSTAINABLE, PREMIUM) */}
-        {product.tags.length > 0 && (
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
-            {product.tags.map(tag => (
-              <span key={tag} className="bg-white text-[#2864a8] text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-lg shadow-sm">
-                {tag}
+        {/* Tag – top left: print technique only */}
+        <div className="absolute top-2 left-2">
+          {(() => {
+            const chip = PRINT_TECHNIQUE_CHIPS[product.printTechnique];
+            return chip ? (
+              <span className="text-[11px] font-bold px-2 py-1.5 rounded-[8px] uppercase" style={{ backgroundColor: '#eef4ff', color: '#2864a8' }}>
+                {chip.label}
               </span>
-            ))}
+            ) : null;
+          })()}
+        </div>
+
+        {/* Color tint overlay — shown on swatch hover */}
+        {hoveredColor && isPhoto && (
+          <div
+            className="absolute inset-0 pointer-events-none rounded-[16px] z-10 transition-colors duration-150"
+            style={{ backgroundColor: hoveredColor, mixBlendMode: 'color', opacity: 0.45 }}
+          />
+        )}
+
+        {/* Skeleton overlay — shown briefly after a new logo is applied */}
+        {!isBulk && isApplying && (
+          <div className="absolute inset-0 z-20 rounded-[16px] overflow-hidden pointer-events-none">
+            <div className="absolute inset-0 bg-[#eef4ff]" />
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.75) 50%, transparent 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'product-card-shimmer 1.0s ease-in-out infinite',
+              }}
+            />
           </div>
         )}
 
-        {/* Type badge – top right */}
+        {/* Type indicator */}
         {isBulk ? (
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#e8f0fc] border border-[#c7d7f4] rounded-lg px-2 py-1">
-            <Package className="w-2.5 h-2.5 text-[#3077c9]" />
-            <span className="text-[9px] font-black text-[#012754] uppercase tracking-wide">
-              Min. {product.minQuantity ?? '?'} pcs
-            </span>
+          <div className="absolute bottom-3 right-3">
+            <span className="text-[10px] font-bold text-[#8093a9] uppercase tracking-widest">Bulk Order</span>
           </div>
         ) : (
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-[#f0fdf4] border border-[#bbf7d0] rounded-lg px-2 py-1">
-            <span className="text-[9px] font-black text-[#16a34a] uppercase tracking-wide">No minimum</span>
+          <div className="absolute top-2 right-2 bg-[#f5f8fc] border border-[#e0ebf7] rounded-[6px] px-1.5 py-0.5">
+            <span className="text-[9px] font-bold text-[#59728f] uppercase tracking-wide">On demand</span>
           </div>
         )}
       </div>
@@ -82,64 +141,47 @@ export function ProductCard({ product, onClick, onDesign: _onDesign, onRefineWit
       {/* Info */}
       <div className="flex flex-col gap-2 px-1">
         <div className="flex flex-col gap-0.5">
-          <p className="text-[11px] font-bold text-[#3077c9] uppercase tracking-widest leading-none truncate">
+          <p className="text-[12px] font-bold text-[#012754] uppercase tracking-widest leading-none truncate">
             {product.brand}
           </p>
-          <p className="text-[14px] font-medium text-[#345276] leading-snug line-clamp-2">
+          <p className="text-[14px] font-normal text-[#59728f] leading-snug line-clamp-2">
             {product.name}
           </p>
         </div>
 
         <div className="flex items-baseline gap-2">
-          <p className="text-[15px] font-bold text-[#012754] leading-tight">
+          <p className="text-[14px] font-medium text-[#012754] leading-tight">
             ${product.price.toFixed(2)}
           </p>
           {isBulk && (
-            <span className="text-[11px] text-[#8093a9]">/ unit</span>
+            <span className="text-[11px] text-snp-navy-500">/ unit</span>
           )}
         </div>
 
-        {product.hasMoreOptions && (
-          <p className="text-[10px] font-bold text-[#3077c9] uppercase tracking-wide">
-            + More Options
-          </p>
+        {product.colors.length > 0 && (
+          <div className="flex items-center gap-1">
+            {product.colors.slice(0, 5).map(c => (
+              <div
+                key={c.hex}
+                className="w-3.5 h-3.5 rounded-full cursor-pointer transition-transform hover:scale-125"
+                style={{
+                  backgroundColor: c.hex,
+                  border: '1.5px solid white',
+                  boxShadow: hoveredColor === c.hex
+                    ? `0 0 0 2px ${c.hex}`
+                    : '0 0 0 1px rgba(1,39,84,0.15)',
+                }}
+                title={c.name}
+                onMouseEnter={e => { e.stopPropagation(); setHoveredColor(c.hex); }}
+                onMouseLeave={e => { e.stopPropagation(); setHoveredColor(null); }}
+              />
+            ))}
+            {product.colors.length > 5 && (
+              <span className="text-[9px] font-bold text-snp-navy-400 ml-0.5">+{product.colors.length - 5}</span>
+            )}
+          </div>
         )}
 
-        {/* ── Hover action tray ────────────────────────────────── */}
-        <div className="flex flex-col gap-1.5 mt-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
-          {/* Primary button */}
-          <button
-            className="h-9 w-full rounded-[10px] text-white text-[13px] font-semibold transition-opacity hover:opacity-90"
-            style={{
-              background: 'linear-gradient(180deg, #5992d4 0%, #3077c9 100%)',
-            }}
-            onClick={e => { e.stopPropagation(); onClick?.(); }}
-          >
-            {isBulk ? 'Create Order' : 'Design This'}
-          </button>
-
-          {/* Secondary row — only for on-demand */}
-          {!isBulk && (
-            <div className="flex gap-1.5">
-              <div className="flex-1">
-                <AddToCollectionMenu
-                  trigger={
-                    <button className="w-full h-8 rounded-[10px] border border-[#e0ebf7] text-[#59728f] text-[12px] font-medium hover:border-[#3077c9] hover:text-[#3077c9] hover:bg-[#f0f6ff] transition-colors">
-                      + Add to Collection
-                    </button>
-                  }
-                />
-              </div>
-              <button
-                className="flex-1 h-8 rounded-[10px] border border-[#e0ebf7] text-[#59728f] text-[12px] font-medium hover:border-[#7c3aed] hover:text-[#7c3aed] hover:bg-[#faf5ff] transition-colors flex items-center justify-center gap-1"
-                onClick={e => { e.stopPropagation(); onRefineWithAI?.(); }}
-              >
-                <Sparkles className="w-3 h-3" />
-                Refine
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

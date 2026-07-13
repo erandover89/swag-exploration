@@ -77,7 +77,7 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
         {/* Header */}
         <div
           className="px-6 pt-6 pb-5"
-          style={{ background: 'linear-gradient(135deg, #011e45 0%, #012754 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #011e45 0%, var(--snp-navy-950) 100%)' }}
         >
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -99,8 +99,8 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
 
           {product && (
             <div className="flex items-center gap-3 bg-white/10 border border-white/10 rounded-[12px] px-3 py-2.5">
-              <div className="w-10 h-10 bg-[#f5f8fc] rounded-[8px] overflow-hidden flex items-center justify-center shrink-0">
-                <img src={product.image} alt="" className="w-full h-full object-cover" />
+              <div className="w-10 h-10 bg-snp-navy-50 rounded-[8px] overflow-hidden flex items-center justify-center shrink-0">
+                <img src={product.image} alt="" className="w-full h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
               </div>
               <div className="min-w-0">
                 <p className="text-[9px] font-bold text-white/50 uppercase tracking-widest">{product.brand}</p>
@@ -113,7 +113,7 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
         <div className="p-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
           {phase === 'idle' && (
             <>
-              <p className="text-[13px] text-[#59728f] mb-4 leading-relaxed">
+              <p className="text-[13px] text-snp-navy-600 mb-4 leading-relaxed">
                 Describe your brand style or what you'd like to change — AI will apply it to your swag.
               </p>
 
@@ -125,8 +125,8 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                     onClick={() => setPrompt(chip)}
                     className={`text-[11px] font-medium px-3 py-1.5 rounded-full border transition-colors ${
                       prompt === chip
-                        ? 'bg-[#eaf1fa] border-[#3077c9] text-[#3077c9]'
-                        : 'border-[#e0ebf7] text-[#59728f] hover:border-[#3077c9] hover:text-[#3077c9]'
+                        ? 'bg-snp-navy-100 border-snp-indigo-600 text-snp-indigo-600'
+                        : 'border-snp-navy-200 text-snp-navy-600 hover:border-snp-indigo-600 hover:text-snp-indigo-600'
                     }`}
                   >
                     {chip}
@@ -140,7 +140,7 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                 onChange={e => setPrompt(e.target.value)}
                 placeholder="e.g. We're a modern fintech startup — keep it clean, navy tones, minimal branding on left chest..."
                 rows={3}
-                className="w-full px-4 py-3 border border-[#e0ebf7] rounded-[14px] text-[13px] text-[#012754] placeholder:text-[#a6b3c3] focus:outline-none focus:border-[#3077c9] focus:ring-2 focus:ring-[#3077c9]/15 resize-none transition-all leading-relaxed"
+                className="w-full px-4 py-3 border border-snp-navy-200 rounded-[14px] text-[13px] text-snp-navy-950 placeholder:text-snp-navy-400 focus:outline-none focus:border-snp-indigo-600 focus:ring-2 focus:ring-snp-indigo-600/15 resize-none transition-all leading-relaxed"
                 style={{ fontFamily: "'DM Sans', sans-serif" }}
               />
 
@@ -150,9 +150,9 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                 className="mt-4 w-full h-11 rounded-[12px] text-white text-[14px] font-bold flex items-center justify-center gap-2 transition-all"
                 style={{
                   background: prompt.trim()
-                    ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
-                    : '#e0ebf7',
-                  color: prompt.trim() ? 'white' : '#a6b3c3',
+                    ? 'linear-gradient(135deg, var(--snp-purple-700) 0%, #5b21b6 100%)'
+                    : 'var(--snp-navy-200)',
+                  color: prompt.trim() ? 'white' : 'var(--snp-navy-400)',
                   cursor: prompt.trim() ? 'pointer' : 'not-allowed',
                 }}
               >
@@ -173,8 +173,8 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                       <div
                         className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-300"
                         style={{
-                          background: done ? '#7c3aed' : active ? 'transparent' : 'transparent',
-                          border: done ? 'none' : active ? '2px solid #7c3aed' : '2px solid #e0ebf7',
+                          background: done ? 'var(--snp-purple-700)' : active ? 'transparent' : 'transparent',
+                          border: done ? 'none' : active ? '2px solid var(--snp-purple-700)' : '2px solid var(--snp-navy-200)',
                         }}
                       >
                         {done ? (
@@ -182,12 +182,12 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                             <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         ) : active ? (
-                          <div className="w-2 h-2 rounded-full bg-[#7c3aed] animate-pulse" />
+                          <div className="w-2 h-2 rounded-full bg-snp-purple-700 animate-pulse" />
                         ) : null}
                       </div>
                       <span
                         className={`text-[13px] font-medium transition-colors ${
-                          done ? 'text-[#7c3aed]' : active ? 'text-[#012754]' : 'text-[#c0cdd9]'
+                          done ? 'text-snp-purple-700' : active ? 'text-snp-navy-950' : 'text-[#c0cdd9]'
                         }`}
                       >
                         {step}
@@ -201,7 +201,7 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
                   className="h-full rounded-full transition-all duration-700"
                   style={{
                     width: `${((refineStep + 1) / REFINE_STEPS.length) * 100}%`,
-                    background: 'linear-gradient(90deg, #7c3aed, #5b21b6)',
+                    background: 'linear-gradient(90deg, var(--snp-purple-700), #5b21b6)',
                   }}
                 />
               </div>
@@ -210,22 +210,22 @@ export function RefineAIModal({ product, onClose }: RefineAIModalProps) {
 
           {phase === 'done' && (
             <div className="py-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#a78bfa] to-[#7c3aed] flex items-center justify-center mx-auto mb-4 shadow-[0_8px_24px_rgba(124,58,237,0.35)]">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#a78bfa] to-snp-purple-700 flex items-center justify-center mx-auto mb-4 shadow-[0_8px_24px_rgba(124,58,237,0.35)]">
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <h3
-                className="text-[20px] font-bold text-[#012754] mb-2"
+                className="text-[20px] font-bold text-snp-navy-950 mb-2"
                 style={{ fontFamily: "'Clash Display', sans-serif" }}
               >
                 Refinements applied!
               </h3>
-              <p className="text-[13px] text-[#59728f] leading-relaxed mb-6">
+              <p className="text-[13px] text-snp-navy-600 leading-relaxed mb-6">
                 Your brand style has been captured. The catalog now reflects your preferences.
               </p>
               <button
                 onClick={handleClose}
                 className="h-10 px-6 rounded-[12px] text-white text-[13px] font-semibold flex items-center gap-2 mx-auto transition-opacity hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}
+                style={{ background: 'linear-gradient(135deg, var(--snp-purple-700) 0%, #5b21b6 100%)' }}
               >
                 Browse the catalog <ArrowRight className="w-3.5 h-3.5" />
               </button>

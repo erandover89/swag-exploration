@@ -13,18 +13,18 @@ export function AskSnippyButton() {
         </div>
         {/* Large sparkle – top right */}
         <div className="absolute -top-0.5 -right-0.5 w-5 h-5 flex items-center justify-center">
-          <Sparkles className="w-4 h-4 text-[#a855f7] drop-shadow-sm" />
+          <Sparkles className="w-4 h-4 text-snp-purple-500 drop-shadow-sm" />
         </div>
         {/* Small sparkle – bottom left */}
         <div className="absolute bottom-1 -left-1.5 w-3.5 h-3.5 flex items-center justify-center">
-          <Sparkles className="w-3 h-3 text-[#a855f7] drop-shadow-sm" />
+          <Sparkles className="w-3 h-3 text-snp-purple-500 drop-shadow-sm" />
         </div>
       </div>
       {/* Label */}
-      <div className="flex items-center gap-0.5 text-[14px] text-[#012754]"
+      <div className="flex items-center gap-0.5 text-[14px] text-snp-navy-950"
            style={{ fontFamily: "'Clash Display', sans-serif" }}>
         <span>Ask Snipp</span>
-        <span className="border border-[#012754] text-[#012754] text-[6px] font-bold px-0.5 rounded-[2px] uppercase ml-0.5">AI</span>
+        <span className="border border-snp-navy-950 text-snp-navy-950 text-[6px] font-bold px-0.5 rounded-[2px] uppercase ml-0.5">AI</span>
       </div>
     </div>
   );

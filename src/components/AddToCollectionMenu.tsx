@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, FolderHeart, Check } from 'lucide-react';
 
 // Mock existing collections shown in the menu
@@ -14,13 +14,20 @@ interface AddToCollectionMenuProps {
   trigger: React.ReactNode;
   /** Alignment of the dropdown: 'left' (default) or 'right' */
   align?: 'left' | 'right';
+  /** Open upward instead of downward (use when card has overflow-hidden) */
+  dropUp?: boolean;
+  /** Product ID to pre-seed into a newly created collection */
+  productId?: string;
+  /** Multiple product IDs to pre-seed (used for bulk-select flows) */
+  productIds?: string[];
 }
 
-export function AddToCollectionMenu({ trigger, align = 'left' }: AddToCollectionMenuProps) {
+export function AddToCollectionMenu({ trigger, align = 'left', dropUp = false, productId, productIds }: AddToCollectionMenuProps) {
   const [open, setOpen] = useState(false);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Close on outside click
   useEffect(() => {
@@ -55,14 +62,16 @@ export function AddToCollectionMenu({ trigger, align = 'left' }: AddToCollection
       {/* Dropdown */}
       {open && (
         <div
-          className={`absolute top-full mt-1.5 bg-white rounded-[16px] border border-[#e0ebf7] shadow-[0px_8px_32px_rgba(1,39,84,0.14)] w-[230px] z-[200] overflow-hidden ${
+          className={`absolute bg-white rounded-[16px] border border-snp-navy-200 shadow-[0px_8px_32px_rgba(1,39,84,0.14)] w-[230px] z-[200] overflow-hidden ${
+            dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          } ${
             align === 'right' ? 'right-0' : 'left-0'
           }`}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
           <div className="px-3 pt-3 pb-1.5">
-            <p className="text-[10px] font-bold text-[#8093a9] uppercase tracking-widest">
+            <p className="text-[10px] font-bold text-snp-navy-500 uppercase tracking-widest">
               Add to collection
             </p>
           </div>
@@ -74,21 +83,21 @@ export function AddToCollectionMenu({ trigger, align = 'left' }: AddToCollection
               <button
                 key={col.id}
                 onClick={() => handleAdd(col.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#f5f8fc] transition-colors text-left"
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-snp-navy-50 transition-colors text-left"
               >
                 <div
                   className="w-6 h-6 rounded-[6px] flex items-center justify-center shrink-0 transition-all duration-300"
-                  style={{ background: isAdded ? '#22c55e' : '#eaf1fa' }}
+                  style={{ background: isAdded ? '#22c55e' : 'var(--snp-navy-100)' }}
                 >
                   {isAdded
                     ? <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
-                    : <FolderHeart className="w-3 h-3 text-[#3077c9]" />}
+                    : <FolderHeart className="w-3 h-3 text-snp-indigo-600" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-[#012754] truncate leading-snug">
+                  <p className="text-[13px] font-medium text-snp-navy-950 truncate leading-snug">
                     {col.name}
                   </p>
-                  <p className="text-[10px] text-[#a6b3c3]">{col.count} items</p>
+                  <p className="text-[10px] text-snp-navy-400">{col.count} items</p>
                 </div>
                 {isAdded && (
                   <span className="text-[10px] text-[#22c55e] font-semibold shrink-0">Added!</span>
@@ -98,17 +107,21 @@ export function AddToCollectionMenu({ trigger, align = 'left' }: AddToCollection
           })}
 
           {/* Divider */}
-          <div className="mx-3 my-1 h-px bg-[#e0ebf7]" />
+          <div className="mx-3 my-1 h-px bg-snp-navy-200" />
 
           {/* Create new */}
           <button
-            onClick={() => { setOpen(false); navigate('/collection/new'); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 pb-3 hover:bg-[#f5f8fc] transition-colors text-left"
+            onClick={() => {
+              const ids = productIds ?? (productId ? [productId] : []);
+              setOpen(false);
+              navigate('/collection/edit', { state: { productIds: ids, from: location.pathname } });
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 pb-3 hover:bg-snp-navy-50 transition-colors text-left"
           >
-            <div className="w-6 h-6 rounded-[6px] bg-[#3077c9] flex items-center justify-center shrink-0">
+            <div className="w-6 h-6 rounded-[6px] bg-snp-indigo-600 flex items-center justify-center shrink-0">
               <Plus className="w-3.5 h-3.5 text-white" />
             </div>
-            <p className="text-[13px] font-semibold text-[#3077c9]">Create New Collection</p>
+            <p className="text-[13px] font-semibold text-snp-indigo-600">Create New Collection</p>
           </button>
         </div>
       )}
