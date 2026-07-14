@@ -53,6 +53,7 @@ export interface Product {
   image: string; // emoji or placeholder
   printTechnique: PrintTechnique;
   printArea?: PrintArea; // where the logo appears on the product
+  photoType?: 'flat' | 'model'; // 'model' = worn/lifestyle shot (no simulated back view)
   mockupImage?: string;
   hasMoreOptions?: boolean;
   quantityTiers?: QuantityTier[]; // bulk products only
@@ -86,7 +87,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/PatagoniaFleece.png',
     printTechnique: 'embroidery',
-    printArea: { x: 51, y: 34, width: 20, height: 14, style: 'multiply' },
+    printArea: { x: 30, y: 34, width: 17, height: 11, style: 'multiply' },
+    photoType: 'model',
     hasMoreOptions: true,
   },
   {
@@ -130,6 +132,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/LeCresseutCasserole.jpg',
     printTechnique: 'uv-printing',
+    printArea: { x: 38, y: 60, width: 24, height: 11, style: 'badge' },
+    photoType: 'flat',
     hasMoreOptions: false,
   },
   {
@@ -175,7 +179,8 @@ export const PRODUCTS: Product[] = [
     leadTimeDays: 14,
     image: '/products/Hoodie.png',
     printTechnique: 'embroidery',
-    printArea: { x: 22, y: 27, width: 56, height: 22, style: 'badge' },
+    printArea: { x: 32, y: 30, width: 36, height: 16, style: 'badge' },
+    photoType: 'model',
     hasMoreOptions: true,
     quantityTiers: [
       { qty: 24,  pricePerUnit: 65 },
@@ -202,6 +207,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/ToteBag.png',
     printTechnique: 'digital-printing',
+    printArea: { x: 34, y: 52, width: 32, height: 17, style: 'multiply' },
+    photoType: 'flat',
     hasMoreOptions: false,
   },
   {
@@ -283,6 +290,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/InstaxCamera.png',
     printTechnique: 'uv-printing',
+    printArea: { x: 24, y: 11, width: 16, height: 10, style: 'badge' },
+    photoType: 'flat',
     hasMoreOptions: false,
   },
   {
@@ -323,6 +332,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/PhoneCase.png',
     printTechnique: 'uv-printing',
+    printArea: { x: 33, y: 42, width: 34, height: 20, style: 'multiply' },
+    photoType: 'flat',
     hasMoreOptions: true,
     isPersonalized: true,
   },
@@ -345,7 +356,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/Unisex-Classic-Tee.png',
     printTechnique: 'dtg',
-    printArea: { x: 24, y: 20, width: 26, height: 14, style: 'multiply' },
+    printArea: { x: 52, y: 33, width: 15, height: 10, style: 'multiply' },
+    photoType: 'model',
     hasMoreOptions: true,
   },
   {
@@ -366,6 +378,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/ToteBag.png',
     printTechnique: 'digital-printing',
+    printArea: { x: 34, y: 52, width: 32, height: 17, style: 'multiply' },
+    photoType: 'flat',
     hasMoreOptions: false,
   },
   {
@@ -389,7 +403,8 @@ export const PRODUCTS: Product[] = [
     leadTimeDays: 14,
     image: "/products/Tentree Men's TreeBlend Polo Shirt .jpg",
     printTechnique: 'embroidery',
-    printArea: { x: 22, y: 27, width: 56, height: 22, style: 'badge' },
+    printArea: { x: 56, y: 33, width: 13, height: 9, style: 'badge' },
+    photoType: 'model',
     hasMoreOptions: true,
     quantityTiers: [
       { qty: 24,  pricePerUnit: 42 },
@@ -416,7 +431,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: '/products/PatagoniaFleece.png',
     printTechnique: 'dtf',
-    printArea: { x: 51, y: 34, width: 20, height: 14, style: 'multiply' },
+    printArea: { x: 30, y: 34, width: 17, height: 11, style: 'multiply' },
+    photoType: 'model',
     hasMoreOptions: false,
   },
   {
@@ -440,6 +456,7 @@ export const PRODUCTS: Product[] = [
     image: '/products/Unisex-Classic-Tee.png',
     printTechnique: 'dtg',
     printArea: { x: 30, y: 37, width: 24, height: 16, style: 'multiply' },
+    photoType: 'model',
     hasMoreOptions: true,
     isPersonalized: true,
   },
@@ -588,6 +605,7 @@ export const PRODUCTS: Product[] = [
     image: "/products/Tentree Men's TreeBlend Polo Shirt .jpg",
     printTechnique: 'embroidery',
     printArea: { x: 56, y: 33, width: 13, height: 9, style: 'badge' },
+    photoType: 'model',
     hasMoreOptions: true,
   },
   {
@@ -609,7 +627,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: "/products/The North Face Women's Everyday Insulated Jacket .jpg",
     printTechnique: 'embroidery',
-    printArea: { x: 55, y: 30, width: 14, height: 10, style: 'badge' },
+    printArea: { x: 30, y: 30, width: 14, height: 10, style: 'badge' },
+    photoType: 'model',
     hasMoreOptions: true,
   },
   {
@@ -631,7 +650,8 @@ export const PRODUCTS: Product[] = [
     shippingIncluded: true,
     image: "/products/Stanley:Stella Women's Nora Hoodie.jpg",
     printTechnique: 'dtg',
-    printArea: { x: 30, y: 43, width: 18, height: 12, style: 'multiply' },
+    printArea: { x: 37, y: 42, width: 26, height: 15, style: 'multiply' },
+    photoType: 'model',
     hasMoreOptions: true,
   },
   {

@@ -2,28 +2,43 @@ import {
   createContext, useContext, useEffect, useMemo, useState, type ReactNode,
 } from 'react';
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { Lock, Menu, Minus, Plus, Search, ShoppingBag, Trash2, X } from 'lucide-react';
+import { Lock, Mail, Menu, Minus, Plus, Search, ShoppingBag, Trash2, User, X } from 'lucide-react';
 import { PRODUCTS, type Product } from '../data/mockData';
 import {
-  getTheme, retailPrice, tierFor, fmtMoney, storeCategories,
-  type DistributorStore, type StoreTheme,
+  getTheme, getStoreTheme, retailPrice, unitMargin, fmtMoney, storeCategories, computeCartTotals, CUSTOMIZATION_UPCHARGE,
+  type CartTotals, type DiscountCode, type DistributorStore, type ShippingMethodId, type StoreTheme,
 } from '../data/storesData';
 import { useStores } from '../context/StoresContext';
 import { storeLogoSrc } from '../components/stores/StoreBits';
+import type { DesignLayer } from '../pages/designTool/types';
 import { StorefrontHome } from './StorefrontHome';
 import { StorefrontShop } from './StorefrontShop';
 import { StorefrontProduct } from './StorefrontProduct';
 import { StorefrontCheckout, StorefrontConfirmed } from './StorefrontCheckout';
+import { StorefrontAccount } from './StorefrontAccount';
+import { SizeChartModal } from './sizeCharts';
+import { appendShopperOrder, type ShopperOrder } from './shopperData';
 
 // ── Cart ──────────────────────────────────────────────────────────────────────
 
+/** A shopper's saved customization for one cart line (from the PDP customizer). */
+export interface LineCustomization {
+  id: string;
+  layers: DesignLayer[];
+  previewDataUrl?: string;
+  summary: string;    // e.g. `Custom text "MILLER 22" · uploaded logo`
+}
+
 export interface CartLine {
-  key: string;         // productId|size|logoId
+  key: string;         // productId|size|logoId|customizationId
   productId: string;
   size: string;
   qty: number;
   logoId: string;
+  customization?: LineCustomization;
 }
+
+export interface Shopper { email: string; name?: string }
 
 interface SfContextValue {
   store: DistributorStore;
@@ -34,7 +49,15 @@ interface SfContextValue {
   clearCart: () => void;
   cartOpen: boolean;
   setCartOpen: (open: boolean) => void;
-  totals: { units: number; subtotal: number; discountPct: number; discount: number; total: number };
+  totals: CartTotals;
+  shopper: Shopper | null;
+  setShopper: (s: Shopper | null) => void;
+  appliedCode: DiscountCode | null;
+  setAppliedCode: (c: DiscountCode | null) => void;
+  shippingMethodId: ShippingMethodId;
+  setShippingMethodId: (id: ShippingMethodId) => void;
+  /** Persist the order (shopper history + admin Orders tab + code usage) and return it. */
+  placeShopperOrder: (opts: { email: string; name?: string; pointsApplied: number; createAccount: boolean }) => ShopperOrder;
 }
 
 const SfContext = createContext<SfContextValue | null>(null);
@@ -106,19 +129,27 @@ function CartDrawer() {
               {lines.map(line => {
                 const p = productById(line.productId);
                 if (!p) return null;
-                const unit = retailPrice(store, p);
+                const unit = retailPrice(store, p) + (line.customization ? CUSTOMIZATION_UPCHARGE : 0);
                 return (
                   <div key={line.key} className="flex gap-3.5">
                     <div className="w-[72px] h-[72px] bg-white shrink-0 flex items-center justify-center p-1.5" style={{ borderRadius: 'var(--sf-radius)', border: '1px solid var(--sf-border)' }}>
-                      {p.image.startsWith('/')
-                        ? <img src={p.image} alt="" className="max-w-full max-h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
-                        : <span className="text-2xl">{p.image}</span>}
+                      {line.customization?.previewDataUrl
+                        ? <img src={line.customization.previewDataUrl} alt="" className="max-w-full max-h-full object-contain" />
+                        : p.image.startsWith('/')
+                          ? <img src={p.image} alt="" className="max-w-full max-h-full object-contain" style={{ mixBlendMode: 'multiply' }} />
+                          : <span className="text-2xl">{p.image}</span>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13.5px] font-bold leading-tight truncate">{p.name}</div>
                       <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--sf-sub)' }}>
                         Size {line.size}{store.logos.length > 1 && ` · ${store.logos.find(l => l.id === line.logoId)?.label ?? 'Primary'} logo`}
                       </div>
+                      {line.customization && (
+                        <div className="text-[11px] mt-0.5 flex items-center gap-1.5">
+                          <span className="font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--sf-accent) 18%, transparent)', color: 'var(--sf-ink)' }}>Customized</span>
+                          <span className="truncate" style={{ color: 'var(--sf-sub)' }}>{line.customization.summary}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 mt-2">
                         <div className="flex items-center" style={{ border: '1px solid var(--sf-border)', borderRadius: 'var(--sf-radius)' }}>
                           <button className="w-7 h-7 flex items-center justify-center" onClick={() => setQty(line.key, line.qty - 1)}><Minus className="w-3 h-3" /></button>
@@ -143,15 +174,25 @@ function CartDrawer() {
               <div className="flex justify-between text-[13px]" style={{ color: 'var(--sf-sub)' }}>
                 <span>Subtotal ({totals.units} items)</span><span>{fmtMoney(totals.subtotal)}</span>
               </div>
-              {totals.discount > 0 && (
+              {totals.volumeDiscount > 0 && (
                 <div className="flex justify-between text-[13px] font-bold" style={{ color: 'var(--sf-accent)' }}>
-                  <span>Volume discount ({totals.discountPct}% off)</span><span>−{fmtMoney(totals.discount)}</span>
+                  <span>Volume discount ({totals.volumeDiscountPct}% off)</span><span>−{fmtMoney(totals.volumeDiscount)}</span>
+                </div>
+              )}
+              {totals.userDiscount > 0 && (
+                <div className="flex justify-between text-[13px] font-bold" style={{ color: 'var(--sf-accent)' }}>
+                  <span>Member discount ({totals.userDiscountPct}% off)</span><span>−{fmtMoney(totals.userDiscount)}</span>
+                </div>
+              )}
+              {totals.codeDiscount > 0 && (
+                <div className="flex justify-between text-[13px] font-bold" style={{ color: 'var(--sf-accent)' }}>
+                  <span>Promo applied</span><span>−{fmtMoney(totals.codeDiscount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-[16px] font-bold pt-1">
                 <span>Total</span><span>{fmtMoney(totals.total)}</span>
               </div>
-              <div className="text-[11px]" style={{ color: 'var(--sf-sub)' }}>Shipping & tax included · printed on demand</div>
+              <div className="text-[11px]" style={{ color: 'var(--sf-sub)' }}>Shipping calculated at checkout · printed on demand</div>
               <SfButton className="w-full mt-1" onClick={() => { setCartOpen(false); navigate(`/store/${store.slug}/checkout`); }}>
                 Checkout
               </SfButton>
@@ -166,7 +207,7 @@ function CartDrawer() {
 // ── Header / footer ───────────────────────────────────────────────────────────
 
 function SfHeader() {
-  const { store, theme, totals, setCartOpen } = useSf();
+  const { store, theme, totals, setCartOpen, shopper } = useSf();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -219,6 +260,16 @@ function SfHeader() {
               <Search className="w-[18px] h-[18px]" />
             </button>
           )}
+          <button
+            title={shopper ? `Signed in as ${shopper.email}` : 'Account & orders'}
+            className="relative w-10 h-10 flex items-center justify-center hover:opacity-70"
+            onClick={() => navigate(`/store/${store.slug}/account`)}
+          >
+            <User className="w-[18px] h-[18px]" />
+            {shopper && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: 'var(--sf-accent)' }} />
+            )}
+          </button>
           <button className="relative w-10 h-10 flex items-center justify-center hover:opacity-70" onClick={() => setCartOpen(true)}>
             <ShoppingBag className="w-[18px] h-[18px]" />
             {totals.units > 0 && (
@@ -239,6 +290,30 @@ function SfHeader() {
 
 function SfFooter() {
   const { store, theme } = useSf();
+  const navigate = useNavigate();
+  const [showSizes, setShowSizes] = useState(false);
+  const [openDoc, setOpenDoc] = useState<{ title: string; body: string } | null>(null);
+  const fc = store.footerContent;
+
+  const items: [string, { label: string; onClick: () => void }[]][] = [
+    ['Shop', [
+      { label: 'All products', onClick: () => navigate(`/store/${store.slug}/shop`) },
+      { label: 'New arrivals', onClick: () => navigate(`/store/${store.slug}/shop`) },
+      { label: 'Best sellers', onClick: () => navigate(`/store/${store.slug}/shop`) },
+    ]],
+    ['Help', [
+      { label: 'Sizing guide', onClick: () => setShowSizes(true) },
+      { label: 'Order history', onClick: () => navigate(`/store/${store.slug}/account`) },
+      { label: 'Shipping & returns', onClick: () => setOpenDoc({ title: 'Shipping & returns', body: fc.qualityPromise }) },
+      { label: 'Contact us', onClick: () => setOpenDoc({ title: 'Contact us', body: fc.contact }) },
+    ]],
+    ['About', [
+      { label: 'Our story', onClick: () => setOpenDoc({ title: 'Our story', body: fc.ourStory }) },
+      { label: 'Quality promise', onClick: () => setOpenDoc({ title: 'Quality promise', body: fc.qualityPromise }) },
+      { label: 'Privacy', onClick: () => setOpenDoc({ title: 'Privacy', body: fc.privacy }) },
+    ]],
+  ];
+
   return (
     <footer className="mt-20 px-5 md:px-10 pt-12 pb-8" style={{ background: 'var(--sf-hero-bg)', color: 'var(--sf-hero-ink)' }}>
       <div className="max-w-[1200px] mx-auto">
@@ -254,32 +329,100 @@ function SfFooter() {
               Official merchandise, printed on demand and delivered worldwide. Every item supports {store.clientName}.
             </p>
           </div>
-          {[
-            ['Shop', ['All products', 'New arrivals', 'Best sellers']],
-            ['Help', ['Sizing guide', 'Shipping & returns', 'Contact us']],
-            ['About', ['Our story', 'Quality promise', 'Privacy']],
-          ].map(([title, links]) => (
-            <div key={title as string}>
+          {items.map(([title, links]) => (
+            <div key={title}>
               <div className="text-[12px] font-bold uppercase tracking-widest mb-3" style={{ opacity: 0.5 }}>{title}</div>
               <div className="space-y-2">
-                {(links as string[]).map(l => <div key={l} className="text-[13px] cursor-pointer hover:opacity-70" style={{ opacity: 0.85 }}>{l}</div>)}
+                {links.map(l => (
+                  <div key={l.label} className="text-[13px] cursor-pointer hover:opacity-70" style={{ opacity: 0.85 }} onClick={l.onClick}>
+                    {l.label}
+                  </div>
+                ))}
               </div>
             </div>
           ))}
         </div>
         <div className="pt-6 flex items-center justify-between flex-wrap gap-3 text-[11.5px]" style={{ opacity: 0.55 }}>
           <span>© 2026 {store.clientName}. All rights reserved.</span>
-          <span>Powered by <b>Snappy Commerce</b> · Fulfillment by SanMar network</span>
+          <span>Powered by <b>Snappy Commerce</b></span>
         </div>
       </div>
+
+      {showSizes && <SizeChartModal onClose={() => setShowSizes(false)} />}
+      {openDoc && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center p-5" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setOpenDoc(null)}>
+          <div
+            className="w-full max-w-md p-6"
+            style={{ background: 'var(--sf-surface)', color: 'var(--sf-ink)', borderRadius: 'calc(var(--sf-radius) * 1.4)', border: '1px solid var(--sf-border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[17px] font-bold" style={{ fontFamily: theme.fontDisplay, textTransform: theme.displayTransform }}>{openDoc.title}</h3>
+              <button onClick={() => setOpenDoc(null)} className="w-8 h-8 flex items-center justify-center hover:opacity-70"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-[13.5px] leading-relaxed whitespace-pre-line" style={{ color: 'var(--sf-sub)' }}>{openDoc.body}</p>
+          </div>
+        </div>
+      )}
     </footer>
+  );
+}
+
+// ── Email gate (approved list) ────────────────────────────────────────────────
+
+function EmailGate({ store, onUnlock }: { store: DistributorStore; onUnlock: (shopper: Shopper) => void }) {
+  const theme = getStoreTheme(store);
+  const [email, setEmail] = useState('');
+  const [err, setErr] = useState(false);
+  const demoHint = store.users.users[0]?.email;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const lower = email.trim().toLowerCase();
+    const user = store.users.users.find(u => u.email === lower);
+    const domainOk = store.users.rules.some(r => r.field === 'emailDomain' && lower.endsWith(`@${r.value.toLowerCase()}`));
+    if (user || domainOk) {
+      sessionStorage.setItem(`sf_unlocked_${store.slug}`, '1');
+      onUnlock({ email: lower, name: user?.name });
+    } else setErr(true);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-5" style={{ background: theme.colors.heroBg, fontFamily: theme.fontBody }}>
+      <div className="w-full max-w-sm text-center p-8" style={{ background: theme.colors.surface, borderRadius: `calc(${theme.radius} * 1.5)`, border: `1px solid ${theme.colors.border}` }}>
+        <img src={storeLogoSrc(store)} alt="" className="h-16 w-16 object-contain mx-auto mb-4" />
+        <h1 className="text-[22px] mb-1" style={{ color: theme.colors.ink, fontFamily: theme.fontDisplay, fontWeight: theme.displayWeight, textTransform: theme.displayTransform }}>
+          {store.clientName}
+        </h1>
+        <p className="text-[13px] mb-6" style={{ color: theme.colors.sub }}>
+          This store is for approved members. Enter your email to continue.
+        </p>
+        <form onSubmit={submit}>
+          <div className="flex items-center gap-2 px-3.5 h-12 mb-3" style={{ border: `1.5px solid ${err ? '#dc2626' : theme.colors.border}`, borderRadius: theme.radius }}>
+            <Mail className="w-4 h-4" style={{ color: theme.colors.sub }} />
+            <input
+              type="email"
+              value={email} onChange={e => { setEmail(e.target.value); setErr(false); }}
+              placeholder="you@example.com"
+              className="flex-1 bg-transparent outline-none text-[14px]"
+              style={{ color: theme.colors.ink }}
+            />
+          </div>
+          {err && <p className="text-[12px] text-red-500 mb-2">That email isn't on the approved list — contact your admin.</p>}
+          <button type="submit" className="w-full h-12 font-bold text-[14px]" style={{ background: theme.colors.primary, color: theme.colors.primaryInk, borderRadius: theme.radius }}>
+            Enter store
+          </button>
+        </form>
+        {demoHint && <p className="mt-4 text-[10.5px]" style={{ color: theme.colors.sub }}>Demo hint: {demoHint}</p>}
+      </div>
+    </div>
   );
 }
 
 // ── Passcode gate ─────────────────────────────────────────────────────────────
 
 function PasscodeGate({ store, onUnlock }: { store: DistributorStore; onUnlock: () => void }) {
-  const theme = getTheme(store.themeId);
+  const theme = getStoreTheme(store);
   const [code, setCode] = useState('');
   const [err, setErr] = useState(false);
   return (
@@ -319,34 +462,69 @@ function PasscodeGate({ store, onUnlock }: { store: DistributorStore; onUnlock: 
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
 
+const EMPTY_TOTALS: CartTotals = {
+  units: 0, subtotal: 0, volumeDiscountPct: 0, volumeDiscount: 0,
+  userDiscountPct: 0, userDiscount: 0, codeDiscount: 0, freeShipping: false, shipping: 0, total: 0,
+};
+
 export function StorefrontShell() {
   const { slug } = useParams<{ slug: string }>();
-  const { getStore } = useStores();
+  const { getStore, updateStore } = useStores();
   const store = slug ? getStore(slug) : undefined;
   const [unlockedTick, setUnlockedTick] = useState(0);
   const [lines, setLines] = useState<CartLine[]>(() => {
     try { return JSON.parse(sessionStorage.getItem(`sf_cart_${slug}`) ?? '[]'); } catch { return []; }
   });
   const [cartOpen, setCartOpen] = useState(false);
+  const [shopper, setShopperState] = useState<Shopper | null>(() => {
+    try { return JSON.parse(sessionStorage.getItem(`sf_shopper_${slug}`) ?? 'null'); } catch { return null; }
+  });
+  const [appliedCode, setAppliedCode] = useState<DiscountCode | null>(null);
+  const [shippingMethodId, setShippingMethodId] = useState<ShippingMethodId>('ground');
+
+  const setShopper = (s: Shopper | null) => {
+    setShopperState(s);
+    try {
+      if (s) sessionStorage.setItem(`sf_shopper_${slug}`, JSON.stringify(s));
+      else sessionStorage.removeItem(`sf_shopper_${slug}`);
+    } catch { /* noop */ }
+  };
 
   useEffect(() => {
     try { sessionStorage.setItem(`sf_cart_${slug}`, JSON.stringify(lines)); } catch { /* noop */ }
   }, [lines, slug]);
 
-  const theme = getTheme(store?.themeId ?? 'modern');
+  // per-store SEO — applied to the document while the storefront is mounted
+  useEffect(() => {
+    if (!store) return;
+    const prevTitle = document.title;
+    document.title = store.seo.metaTitle || store.name;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const created = !meta;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    const prevDesc = meta.content;
+    meta.content = store.seo.metaDescription;
+    return () => {
+      document.title = prevTitle;
+      if (created) meta?.remove();
+      else if (meta) meta.content = prevDesc;
+    };
+  }, [store]);
+
+  const theme = store ? getStoreTheme(store) : getTheme('modern');
 
   const totals = useMemo(() => {
-    if (!store) return { units: 0, subtotal: 0, discountPct: 0, discount: 0, total: 0 };
-    const units = lines.reduce((a, l) => a + l.qty, 0);
-    const subtotal = lines.reduce((a, l) => {
-      const p = productById(l.productId);
-      return a + (p ? retailPrice(store, p) * l.qty : 0);
-    }, 0);
-    const tier = tierFor(store, units);
-    const discountPct = tier?.discountPct ?? 0;
-    const discount = Math.round(subtotal * discountPct) / 100;
-    return { units, subtotal, discountPct, discount, total: subtotal - discount };
-  }, [lines, store]);
+    if (!store) return EMPTY_TOTALS;
+    return computeCartTotals(
+      store,
+      lines.map(l => ({ productId: l.productId, qty: l.qty, customized: !!l.customization })),
+      { email: shopper?.email, code: appliedCode, shippingMethodId },
+    );
+  }, [lines, store, shopper, appliedCode, shippingMethodId]);
 
   if (!store) {
     return (
@@ -357,15 +535,21 @@ export function StorefrontShell() {
     );
   }
 
-  const locked = store.settings.access === 'passcode' && !sessionStorage.getItem(`sf_unlocked_${store.slug}`);
-  if (locked) return <PasscodeGate store={store} onUnlock={() => setUnlockedTick(t => t + 1)} key={unlockedTick} />;
+  const gated = store.settings.access === 'passcode' || store.settings.access === 'email-list';
+  const locked = gated && !sessionStorage.getItem(`sf_unlocked_${store.slug}`);
+  if (locked) {
+    return store.settings.access === 'email-list'
+      // the email gate doubles as sign-in, so member discounts apply immediately
+      ? <EmailGate store={store} onUnlock={s => { setShopper(s); setUnlockedTick(t => t + 1); }} key={unlockedTick} />
+      : <PasscodeGate store={store} onUnlock={() => setUnlockedTick(t => t + 1)} key={unlockedTick} />;
+  }
 
   const addLines = (add: Omit<CartLine, 'key'>[]) => {
     setLines(prev => {
       const next = [...prev];
       for (const l of add) {
         if (l.qty <= 0) continue;
-        const key = `${l.productId}|${l.size}|${l.logoId}`;
+        const key = `${l.productId}|${l.size}|${l.logoId}|${l.customization?.id ?? 'std'}`;
         const existing = next.find(x => x.key === key);
         if (existing) existing.qty += l.qty;
         else next.push({ ...l, key });
@@ -379,6 +563,59 @@ export function StorefrontShell() {
     setLines(prev => qty <= 0 ? prev.filter(l => l.key !== key) : prev.map(l => l.key === key ? { ...l, qty } : l));
   };
 
+  const placeShopperOrder: SfContextValue['placeShopperOrder'] = ({ email, name, pointsApplied, createAccount }) => {
+    const orderId = `${store.slug.slice(0, 2).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const order: ShopperOrder = {
+      id: orderId,
+      storeId: store.id,
+      slug: store.slug,
+      email: email.toLowerCase(),
+      name,
+      placedAt: new Date().toISOString(),
+      lines: lines.map(l => {
+        const p = productById(l.productId);
+        return {
+          productId: l.productId, size: l.size, qty: l.qty, logoId: l.logoId,
+          unitPrice: p ? retailPrice(store, p) + (l.customization ? CUSTOMIZATION_UPCHARGE : 0) : 0,
+          customization: l.customization,
+        };
+      }),
+      totals: {
+        units: totals.units, subtotal: totals.subtotal, volumeDiscount: totals.volumeDiscount,
+        userDiscount: totals.userDiscount, codeDiscount: totals.codeDiscount,
+        shipping: totals.shipping, pointsApplied, total: totals.total,
+      },
+      discountCode: appliedCode?.code,
+      shippingMethodId,
+    };
+    appendShopperOrder(order);
+
+    // mirror a summary row into the admin Orders tab (same order id)
+    const margin = lines.reduce((a, l) => {
+      const p = productById(l.productId);
+      return a + (p ? unitMargin(store, p) * l.qty : 0);
+    }, 0);
+    updateStore(store.id, s => ({
+      orders: [{
+        id: orderId,
+        customer: name || email,
+        items: totals.units,
+        total: totals.total,
+        margin: Math.round(margin),
+        status: 'Paid' as const,
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      }, ...s.orders],
+      // burn a use on the redeemed code
+      ...(appliedCode ? {
+        discountCodes: s.discountCodes.map(c => c.id === appliedCode.id ? { ...c, usedCount: c.usedCount + 1 } : c),
+      } : {}),
+    }));
+
+    if (createAccount) setShopper({ email: email.toLowerCase(), name });
+    setAppliedCode(null);
+    return order;
+  };
+
   const c = theme.colors;
   const cssVars = {
     '--sf-bg': c.bg, '--sf-surface': c.surface, '--sf-ink': c.ink, '--sf-sub': c.sub,
@@ -388,7 +625,10 @@ export function StorefrontShell() {
   } as React.CSSProperties;
 
   return (
-    <SfContext.Provider value={{ store, theme, lines, addLines, setQty, clearCart: () => setLines([]), cartOpen, setCartOpen, totals }}>
+    <SfContext.Provider value={{
+      store, theme, lines, addLines, setQty, clearCart: () => setLines([]), cartOpen, setCartOpen, totals,
+      shopper, setShopper, appliedCode, setAppliedCode, shippingMethodId, setShippingMethodId, placeShopperOrder,
+    }}>
       <div className="min-h-screen flex flex-col" style={{ ...cssVars, background: 'var(--sf-bg)', color: 'var(--sf-ink)', fontFamily: theme.fontBody }}>
         {store.status !== 'live' && (
           <div className="text-center text-[12px] font-bold py-1.5 bg-amber-400 text-amber-950" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -403,6 +643,7 @@ export function StorefrontShell() {
             <Route path="p/:pid" element={<StorefrontProduct />} />
             <Route path="checkout" element={<StorefrontCheckout />} />
             <Route path="confirmed" element={<StorefrontConfirmed />} />
+            <Route path="account/*" element={<StorefrontAccount />} />
           </Routes>
         </main>
         <SfFooter />

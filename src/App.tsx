@@ -71,7 +71,7 @@ function AppShell() {
       <div className="flex-1">
         {/* Main routes — rendered at background location when an overlay is active */}
         <Routes location={displayLocation}>
-          <Route path="/"               element={<SwagOverview />} />
+          <Route path="/"               element={<Navigate to="/stores" replace />} />
           <Route path="/swag"           element={<SwagOverview />} />
           <Route path="/catalog"        element={<SwagCatalog defaultTab="catalog" />} />
           <Route path="/brands"          element={<Navigate to="/designs" replace />} />

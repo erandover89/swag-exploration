@@ -1,20 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, ChevronLeft, CreditCard, Loader2, Lock, Wallet } from 'lucide-react';
-import { fmtMoney, retailPrice } from '../data/storesData';
+import { CheckCircle2, ChevronLeft, CreditCard, Loader2, Lock, Tag, Truck, Wallet, X } from 'lucide-react';
+import { CUSTOMIZATION_UPCHARGE, SHIPPING_METHODS, fmtMoney, retailPrice, validateDiscount } from '../data/storesData';
 import { productById, SfButton, useSf } from './StorefrontShell';
 
 const field = 'w-full h-12 px-3.5 text-[13.5px] outline-none bg-transparent';
 const fieldWrap = { border: '1.5px solid var(--sf-border)', borderRadius: 'var(--sf-radius)', background: 'var(--sf-surface)' } as const;
 
+function arrivalLabel(etaDays: [number, number]): string {
+  const fmt = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+  return etaDays[0] === etaDays[1] ? `Arrives ${fmt(etaDays[0])}` : `Arrives ${fmt(etaDays[0])} – ${fmt(etaDays[1])}`;
+}
+
 export function StorefrontCheckout() {
-  const { store, theme, lines, totals, clearCart } = useSf();
+  const {
+    store, theme, lines, totals, clearCart, shopper, setShopper, placeShopperOrder,
+    appliedCode, setAppliedCode, shippingMethodId, setShippingMethodId,
+  } = useSf();
   const navigate = useNavigate();
   const [placing, setPlacing] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [email, setEmail] = useState(shopper?.email ?? 'jordan@example.com');
+  const [firstName, setFirstName] = useState(shopper?.name?.split(' ')[0] ?? 'Jordan');
+  const [lastName, setLastName] = useState(shopper?.name?.split(' ').slice(1).join(' ') ?? 'Avery');
+  const [createAccount, setCreateAccount] = useState(true);
   const usePoints = store.settings.payment !== 'card';
   const pointsBalance = 150;
   const pointsApplied = usePoints ? Math.min(pointsBalance, totals.total) : 0;
   const cardDue = Math.max(0, totals.total - pointsApplied);
+
+  // recognize approved users as they type their email so member discounts apply live
+  useEffect(() => {
+    const lower = email.trim().toLowerCase();
+    const member = store.users.users.find(u => u.email === lower);
+    if (member && shopper?.email !== lower) setShopper({ email: lower, name: member.name });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email]);
+
+  const applyCode = () => {
+    const result = validateDiscount(store, codeInput, shopper?.email, lines.map(l => l.productId));
+    if (result.ok) {
+      setAppliedCode(result.code);
+      setCodeError('');
+      setCodeInput('');
+    } else {
+      setCodeError(result.reason);
+    }
+  };
 
   if (lines.length === 0 && !placing) {
     return (
@@ -28,8 +65,13 @@ export function StorefrontCheckout() {
   const placeOrder = () => {
     setPlacing(true);
     setTimeout(() => {
-      const orderNo = `${store.slug.slice(0, 2).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      sessionStorage.setItem(`sf_last_order_${store.slug}`, JSON.stringify({ orderNo, total: cardDue, points: pointsApplied, units: totals.units }));
+      const order = placeShopperOrder({
+        email: email.trim() || 'guest@example.com',
+        name: `${firstName} ${lastName}`.trim() || undefined,
+        pointsApplied,
+        createAccount,
+      });
+      sessionStorage.setItem(`sf_last_order_${store.slug}`, JSON.stringify({ orderNo: order.id, total: cardDue, points: pointsApplied, units: totals.units }));
       clearCart();
       navigate(`/store/${store.slug}/confirmed`);
     }, 1800);
@@ -50,20 +92,68 @@ export function StorefrontCheckout() {
         <div className="lg:col-span-3 space-y-8">
           <section>
             <h2 className="text-[15px] font-bold mb-3">Contact</h2>
-            <div style={fieldWrap}><input className={field} placeholder="Email address" defaultValue="jordan@example.com" style={{ color: 'var(--sf-ink)' }} /></div>
+            <div style={fieldWrap}>
+              <input className={field} placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} style={{ color: 'var(--sf-ink)' }} />
+            </div>
+            {!shopper && (
+              <label className="mt-2.5 flex items-center gap-2.5 cursor-pointer text-[12.5px]" style={{ color: 'var(--sf-sub)' }}>
+                <input
+                  type="checkbox"
+                  checked={createAccount}
+                  onChange={e => setCreateAccount(e.target.checked)}
+                  className="w-4 h-4"
+                  style={{ accentColor: 'var(--sf-primary)' }}
+                />
+                Create an account to track this order and see your history
+              </label>
+            )}
           </section>
 
           <section>
             <h2 className="text-[15px] font-bold mb-3">Shipping address</h2>
             <div className="grid grid-cols-2 gap-3">
-              <div style={fieldWrap}><input className={field} placeholder="First name" defaultValue="Jordan" style={{ color: 'var(--sf-ink)' }} /></div>
-              <div style={fieldWrap}><input className={field} placeholder="Last name" defaultValue="Avery" style={{ color: 'var(--sf-ink)' }} /></div>
+              <div style={fieldWrap}><input className={field} placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ color: 'var(--sf-ink)' }} /></div>
+              <div style={fieldWrap}><input className={field} placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} style={{ color: 'var(--sf-ink)' }} /></div>
               <div className="col-span-2" style={fieldWrap}><input className={field} placeholder="Street address" defaultValue="482 Juniper Lane" style={{ color: 'var(--sf-ink)' }} /></div>
               <div style={fieldWrap}><input className={field} placeholder="City" defaultValue="Boulder" style={{ color: 'var(--sf-ink)' }} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div style={fieldWrap}><input className={field} placeholder="State" defaultValue="CO" style={{ color: 'var(--sf-ink)' }} /></div>
                 <div style={fieldWrap}><input className={field} placeholder="ZIP" defaultValue="80302" style={{ color: 'var(--sf-ink)' }} /></div>
               </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-[15px] font-bold mb-3 flex items-center gap-2">
+              <Truck className="w-4 h-4" style={{ color: 'var(--sf-primary)' }} /> Shipping method
+            </h2>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {SHIPPING_METHODS.map(m => {
+                const active = shippingMethodId === m.id;
+                const free = totals.freeShipping;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setShippingMethodId(m.id)}
+                    className="text-left p-3.5 transition-colors"
+                    style={{
+                      border: '1.5px solid',
+                      borderColor: active ? 'var(--sf-primary)' : 'var(--sf-border)',
+                      background: active ? 'color-mix(in srgb, var(--sf-primary) 7%, var(--sf-surface))' : 'var(--sf-surface)',
+                      borderRadius: 'var(--sf-radius)',
+                    }}
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[13.5px] font-bold">{m.label}</span>
+                      <span className="text-[13px] font-bold" style={{ color: active ? 'var(--sf-primary)' : 'var(--sf-ink)' }}>
+                        {free || m.price === 0 ? 'Free' : fmtMoney(m.price)}
+                      </span>
+                    </div>
+                    <div className="text-[11.5px] mt-0.5" style={{ color: 'var(--sf-sub)' }}>{arrivalLabel(m.etaDays)}</div>
+                    {free && m.price > 0 && <div className="text-[10.5px] font-bold mt-0.5" style={{ color: 'var(--sf-accent)' }}>Free shipping code applied</div>}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -100,7 +190,7 @@ export function StorefrontCheckout() {
             {placing ? <><Loader2 className="w-4 h-4 animate-spin" /> Placing order…</> : <>Pay {fmtMoney(cardDue)}{pointsApplied > 0 && ` + ${Math.round(pointsApplied)} pts`}</>}
           </SfButton>
           <p className="text-[11px] text-center -mt-4" style={{ color: 'var(--sf-sub)' }}>
-            Demo checkout — no card is charged. Wholesale routes to SanMar, margin to your distributor.
+            Demo checkout — no card is charged.
           </p>
         </div>
 
@@ -123,24 +213,80 @@ export function StorefrontCheckout() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[12.5px] font-semibold truncate">{p.name}</div>
-                    <div className="text-[11px]" style={{ color: 'var(--sf-sub)' }}>Size {line.size}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--sf-sub)' }}>
+                      Size {line.size}{line.customization && ' · Customized'}
+                    </div>
                   </div>
-                  <span className="text-[12.5px] font-bold">{fmtMoney(retailPrice(store, p) * line.qty)}</span>
+                  <span className="text-[12.5px] font-bold">
+                    {fmtMoney((retailPrice(store, p) + (line.customization ? CUSTOMIZATION_UPCHARGE : 0)) * line.qty)}
+                  </span>
                 </div>
               );
             })}
           </div>
+
+          {/* Discount code */}
+          <div className="pb-4">
+            {appliedCode ? (
+              <div className="flex items-center gap-2 px-3 py-2.5" style={{ border: '1.5px dashed var(--sf-primary)', borderRadius: 'var(--sf-radius)', background: 'color-mix(in srgb, var(--sf-primary) 6%, transparent)' }}>
+                <Tag className="w-3.5 h-3.5" style={{ color: 'var(--sf-primary)' }} />
+                <span className="text-[12.5px] font-bold font-mono">{appliedCode.code}</span>
+                <span className="text-[11.5px]" style={{ color: 'var(--sf-sub)' }}>
+                  {appliedCode.type === 'percent' ? `${appliedCode.value}% off` : appliedCode.type === 'fixed' ? `$${appliedCode.value} off` : 'Free shipping'}
+                </span>
+                <button onClick={() => setAppliedCode(null)} className="ml-auto hover:opacity-70" style={{ color: 'var(--sf-sub)' }}><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <div className="flex-1" style={fieldWrap}>
+                    <input
+                      className="w-full h-11 px-3 text-[12.5px] uppercase outline-none bg-transparent"
+                      placeholder="Discount code"
+                      value={codeInput}
+                      onChange={e => { setCodeInput(e.target.value); setCodeError(''); }}
+                      onKeyDown={e => e.key === 'Enter' && applyCode()}
+                      style={{ color: 'var(--sf-ink)' }}
+                    />
+                  </div>
+                  <button
+                    onClick={applyCode}
+                    disabled={!codeInput.trim()}
+                    className="h-11 px-4 text-[12.5px] font-bold disabled:opacity-40 hover:opacity-80"
+                    style={{ border: '1.5px solid var(--sf-border)', borderRadius: 'var(--sf-radius)', color: 'var(--sf-ink)' }}
+                  >
+                    Apply
+                  </button>
+                </div>
+                {codeError && <p className="mt-1.5 text-[11.5px] font-semibold text-red-500">{codeError}</p>}
+              </>
+            )}
+          </div>
+
           <div className="space-y-2 pt-4 text-[13px]" style={{ borderTop: '1px solid var(--sf-border)' }}>
             <div className="flex justify-between" style={{ color: 'var(--sf-sub)' }}>
               <span>Subtotal ({totals.units} items)</span><span>{fmtMoney(totals.subtotal)}</span>
             </div>
-            {totals.discount > 0 && (
+            {totals.volumeDiscount > 0 && (
               <div className="flex justify-between font-bold" style={{ color: 'var(--sf-accent)' }}>
-                <span>Volume discount ({totals.discountPct}%)</span><span>−{fmtMoney(totals.discount)}</span>
+                <span>Volume discount ({totals.volumeDiscountPct}%)</span><span>−{fmtMoney(totals.volumeDiscount)}</span>
+              </div>
+            )}
+            {totals.userDiscount > 0 && (
+              <div className="flex justify-between font-bold" style={{ color: 'var(--sf-accent)' }}>
+                <span>Member discount ({totals.userDiscountPct}%)</span><span>−{fmtMoney(totals.userDiscount)}</span>
+              </div>
+            )}
+            {appliedCode && totals.codeDiscount > 0 && (
+              <div className="flex justify-between font-bold" style={{ color: 'var(--sf-accent)' }}>
+                <span>Promo {appliedCode.code}</span><span>−{fmtMoney(totals.codeDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between" style={{ color: 'var(--sf-sub)' }}>
-              <span>Shipping & taxes</span><span className="font-semibold" style={{ color: 'var(--sf-primary)' }}>Included</span>
+              <span>Shipping ({SHIPPING_METHODS.find(m => m.id === shippingMethodId)?.label})</span>
+              <span className="font-semibold" style={{ color: totals.shipping === 0 ? 'var(--sf-primary)' : 'var(--sf-ink)' }}>
+                {totals.shipping === 0 ? 'Free' : fmtMoney(totals.shipping)}
+              </span>
             </div>
             {pointsApplied > 0 && (
               <div className="flex justify-between font-bold" style={{ color: 'var(--sf-primary)' }}>
@@ -189,9 +335,14 @@ export function StorefrontConfirmed() {
         ))}
       </div>
 
-      <Link to={`/store/${store.slug}`}>
-        <SfButton>Back to {store.clientName}</SfButton>
-      </Link>
+      <div className="flex items-center justify-center gap-3 flex-wrap">
+        <Link to={`/store/${store.slug}/account/orders/${order.orderNo}`}>
+          <SfButton>Track this order</SfButton>
+        </Link>
+        <Link to={`/store/${store.slug}`}>
+          <SfButton kind="ghost">Back to {store.clientName}</SfButton>
+        </Link>
+      </div>
     </div>
   );
 }

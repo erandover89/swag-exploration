@@ -16,9 +16,12 @@ export function StorefrontShop() {
   const [sort, setSort] = useState<SortKey>('featured');
   const [colorFilter, setColorFilter] = useState<string>('');
   const [sizeFilter, setSizeFilter] = useState<string>('');
+  const [brandFilter, setBrandFilter] = useState<string>('');
 
   const products = visibleProducts(store);
   const cats = storeCategories(store);
+
+  const allBrands = useMemo(() => [...new Set(products.map(p => p.brand))].sort(), [products]);
 
   const allColors = useMemo(() => {
     const seen = new Map<string, string>();
@@ -42,6 +45,7 @@ export function StorefrontShop() {
     }
     if (colorFilter) list = list.filter(p => p.colors.some(c => c.name === colorFilter));
     if (sizeFilter) list = list.filter(p => p.sizes.includes(sizeFilter));
+    if (brandFilter) list = list.filter(p => p.brand === brandFilter);
     return [...list].sort((a, b) => {
       if (sort === 'price-asc') return retailPrice(store, a) - retailPrice(store, b);
       if (sort === 'price-desc') return retailPrice(store, b) - retailPrice(store, a);
@@ -50,7 +54,34 @@ export function StorefrontShop() {
       const fb = store.featuredIds.includes(b.id) ? 0 : 1;
       return fa - fb;
     });
-  }, [products, cat, q, colorFilter, sizeFilter, sort, store]);
+  }, [products, cat, q, colorFilter, sizeFilter, brandFilter, sort, store]);
+
+  // Admin-defined storefront organization (Products tab) — sections render only
+  // on the unfiltered default view; any search/filter/sort falls back to a flat grid.
+  const sections = useMemo(() => {
+    const mode = store.catalogLayout.mode;
+    const pristine = mode !== 'manual' && !q && !cat && !colorFilter && !sizeFilter && !brandFilter && sort === 'featured';
+    if (!pristine) return null;
+    if (mode === 'category') {
+      return [...new Set(filtered.map(p => p.category))].map(c => ({
+        id: c as string, label: c as string, items: filtered.filter(p => p.category === c),
+      }));
+    }
+    if (mode === 'brand') {
+      return [...new Set(filtered.map(p => p.brand))].sort().map(b => ({
+        id: b, label: b, items: filtered.filter(p => p.brand === b),
+      }));
+    }
+    // custom groups
+    const groups = store.catalogLayout.groups;
+    if (!groups.length) return null;
+    const grouped = new Set(groups.flatMap(g => g.productIds));
+    const named = groups
+      .map(g => ({ id: g.id, label: g.label, items: g.productIds.map(id => filtered.find(p => p.id === id)).filter((p): p is typeof filtered[number] => !!p) }))
+      .filter(g => g.items.length);
+    const rest = filtered.filter(p => !grouped.has(p.id));
+    return rest.length ? [...named, { id: '__rest__', label: 'More gear', items: rest }] : named;
+  }, [store.catalogLayout, filtered, q, cat, colorFilter, sizeFilter, brandFilter, sort]);
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -154,9 +185,40 @@ export function StorefrontShop() {
             </button>
           ))}
         </div>
-        {(colorFilter || sizeFilter || cat || q) && (
+        <div className="w-px h-5" style={{ background: 'var(--sf-border)' }} />
+        {allBrands.length > 6 ? (
+          <select
+            value={brandFilter}
+            onChange={e => setBrandFilter(e.target.value)}
+            className="h-8 px-2 text-[11.5px] font-bold outline-none"
+            style={{ border: '1.5px solid var(--sf-border)', borderRadius: 'calc(var(--sf-radius)/1.5)', background: 'var(--sf-surface)', color: brandFilter ? 'var(--sf-primary)' : 'var(--sf-sub)' }}
+          >
+            <option value="">All brands</option>
+            {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        ) : (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allBrands.map(b => (
+              <button
+                key={b}
+                onClick={() => setBrandFilter(brandFilter === b ? '' : b)}
+                className="h-7 px-2.5 text-[11.5px] font-bold"
+                style={{
+                  border: '1.5px solid',
+                  borderColor: brandFilter === b ? 'var(--sf-primary)' : 'var(--sf-border)',
+                  color: brandFilter === b ? 'var(--sf-primary)' : 'var(--sf-sub)',
+                  borderRadius: 'calc(var(--sf-radius) / 1.5)',
+                  background: 'var(--sf-surface)',
+                }}
+              >
+                {b}
+              </button>
+            ))}
+          </div>
+        )}
+        {(colorFilter || sizeFilter || brandFilter || cat || q) && (
           <button
-            onClick={() => { setColorFilter(''); setSizeFilter(''); setParams(new URLSearchParams(), { replace: true }); }}
+            onClick={() => { setColorFilter(''); setSizeFilter(''); setBrandFilter(''); setParams(new URLSearchParams(), { replace: true }); }}
             className="font-bold hover:opacity-70"
             style={{ color: 'var(--sf-primary)' }}
           >
@@ -169,6 +231,19 @@ export function StorefrontShop() {
         <div className="py-24 text-center" style={{ color: 'var(--sf-sub)' }}>
           <div className="text-[36px] mb-3">🔍</div>
           <p className="text-[15px] font-semibold">Nothing matches those filters.</p>
+        </div>
+      ) : sections ? (
+        <div className="space-y-12">
+          {sections.map(section => (
+            <section key={section.id}>
+              <h2 className="text-[22px] mb-4" style={{ fontFamily: theme.fontDisplay, fontWeight: theme.displayWeight, textTransform: theme.displayTransform }}>
+                {section.label}
+              </h2>
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {section.items.map(p => <ProductCardSf key={p.id} p={p} />)}
+              </div>
+            </section>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

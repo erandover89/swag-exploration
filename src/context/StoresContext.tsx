@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { SEED_STORES, initialsLogo, type DistributorStore } from '../data/storesData';
+import { SEED_STORES, initialsLogo, normalizeStore, type DistributorStore } from '../data/storesData';
 
 const LS_KEY = 'snappy_distributor_stores_v1';
 
@@ -20,7 +20,8 @@ function load(): DistributorStore[] {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DistributorStore[];
-      if (Array.isArray(parsed) && parsed.length) return parsed;
+      // persisted stores may predate newer fields — fill them in
+      if (Array.isArray(parsed) && parsed.length) return parsed.map(normalizeStore);
     }
   } catch { /* fall through to seeds */ }
   return SEED_STORES;
@@ -47,7 +48,7 @@ export function StoresProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addStore = useCallback((store: DistributorStore) => {
-    setStores(prev => [store, ...prev]);
+    setStores(prev => [normalizeStore(store), ...prev]);
   }, []);
 
   const duplicateStore = useCallback((id: string): DistributorStore | undefined => {

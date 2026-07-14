@@ -1,16 +1,18 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowRight, Upload, Check, Sparkles, X, Wand2, Store as StoreIcon,
+  ArrowLeft, ArrowRight, Upload, Check, Sparkles, X, Wand2, Store as StoreIcon, Search,
 } from 'lucide-react';
 import { PRODUCTS, CATEGORIES, type ProductCategory } from '../../data/mockData';
 import {
-  CATALOG_TEMPLATES, DEFAULT_TIERS, STORE_THEMES, STYLE_CODES,
+  CATALOG_TEMPLATES, CLIENT_TYPES, DEFAULT_TIERS, STORE_THEMES, STYLE_CODES, defaultFooterContent,
   type ClientType, type DistributorStore, type StoreLogoAsset,
 } from '../../data/storesData';
 import { useStores, makeInitialsLogo } from '../../context/StoresContext';
 import { StoreCreatingLoader } from '../../components/StoreCreatingLoader';
 import { StoreProductImage } from '../../components/stores/StoreBits';
+import { COLOR_FAMILIES, extractPalette, recommendColorFamilies } from '../../utils/logoColors';
+import { fileToDataUrl, resizeImageDataUrl } from '../../utils/imageResize';
 
 const STEPS = [
   { id: 'client', label: 'Customer', desc: 'Who is this store for' },
@@ -19,51 +21,7 @@ const STEPS = [
   { id: 'theme', label: 'Theme & pricing', desc: 'Look, feel and markup' },
 ] as const;
 
-const CLIENT_TYPES: ClientType[] = ['Team Sports', 'Cafe & Retail', 'Corporate', 'Education', 'Nonprofit'];
-
 const LOGO_BG_CHOICES = ['#0d1b2a', '#b91c1c', '#0e7490', '#7c3aed', '#a2530a', '#166534'];
-
-// Extract up to 3 dominant colors from an uploaded logo via canvas sampling.
-function extractPalette(dataUrl: string): Promise<string[]> {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const S = 48;
-        const canvas = document.createElement('canvas');
-        canvas.width = S; canvas.height = S;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return resolve([]);
-        ctx.drawImage(img, 0, 0, S, S);
-        const data = ctx.getImageData(0, 0, S, S).data;
-        const buckets = new Map<string, { r: number; g: number; b: number; n: number }>();
-        for (let i = 0; i < data.length; i += 4) {
-          const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
-          if (a < 128) continue;
-          // skip near-white/near-black backgrounds
-          if (r > 240 && g > 240 && b > 240) continue;
-          const key = `${r >> 5}-${g >> 5}-${b >> 5}`;
-          const bkt = buckets.get(key) ?? { r: 0, g: 0, b: 0, n: 0 };
-          bkt.r += r; bkt.g += g; bkt.b += b; bkt.n++;
-          buckets.set(key, bkt);
-        }
-        const top = [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, 3)
-          .map(({ r, g, b, n }) => `#${[r / n, g / n, b / n].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`);
-        resolve(top);
-      } catch { resolve([]); }
-    };
-    img.onerror = () => resolve([]);
-    img.src = dataUrl;
-  });
-}
-
-const COLOR_FAMILIES: { id: string; label: string; hexes: string[]; match: (hex: string) => boolean }[] = [
-  { id: 'neutrals', label: 'Neutrals', hexes: ['#1a1a1a', '#9ca3af', '#f9fafb'], match: h => ['#1a1a1a', '#111827', '#374151', '#9ca3af', '#6b7280', '#f9fafb', '#f5f0e8', '#d4c5a0', '#d4c5a9', '#8c7b6b', '#c0c0c0', '#475569'].includes(h) },
-  { id: 'blues', label: 'Blues & navy', hexes: ['#1e3a5f', '#3b82f6', '#1d4ed8'], match: h => ['#1e3a5f', '#3b82f6', '#1d4ed8', '#5b7fa6', '#1a4a5c', '#3077c9'].includes(h) },
-  { id: 'warm', label: 'Warm tones', hexes: ['#dc2626', '#e97316', '#7f1d1d'], match: h => ['#dc2626', '#e97316', '#e11d48', '#b91c1c', '#7f1d1d', '#78350f', '#e8b4b8'].includes(h) },
-  { id: 'greens', label: 'Greens & earth', hexes: ['#166534', '#4a5240', '#4d7c5f'], match: h => ['#166534', '#4a5240', '#8c7b6b', '#d4c5a0'].includes(h) },
-  { id: 'brights', label: 'Brights', hexes: ['#7c3aed', '#c026d3', '#5eead4'], match: h => ['#7c3aed'].includes(h) },
-];
 
 export function StoreCreateWizard() {
   const navigate = useNavigate();
@@ -76,26 +34,31 @@ export function StoreCreateWizard() {
   // Step 1 — customer
   const [clientName, setClientName] = useState('');
   const [storeName, setStoreName] = useState('');
-  const [clientType, setClientType] = useState<ClientType>('Team Sports');
+  const [clientType, setClientType] = useState<ClientType | null>(null);
 
   // Step 2 — logos
   const [logos, setLogos] = useState<StoreLogoAsset[]>([]);
   const [primaryLogoId, setPrimaryLogoId] = useState<string>('');
   const [palette, setPalette] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
+  const [recommendedFams, setRecommendedFams] = useState<string[]>([]);
+  const colorsTouched = useRef(false); // never override a user's manual color choices
 
-  // Step 3 — catalog
-  const [templateId, setTemplateId] = useState<string>('team-sports');
+  // Step 3 — catalog (Full Catalog is first in CATALOG_TEMPLATES and the default)
+  const [templateId, setTemplateId] = useState<string>(CATALOG_TEMPLATES[0].id);
+  const [catalogQuery, setCatalogQuery] = useState('');
   const [includedIds, setIncludedIds] = useState<Set<string>>(new Set(CATALOG_TEMPLATES[0].productIds));
   const [activeCategories, setActiveCategories] = useState<Set<ProductCategory>>(new Set(CATEGORIES));
   const [activeBrands, setActiveBrands] = useState<Set<string>>(new Set(PRODUCTS.map(p => p.brand)));
   const [activeColorFams, setActiveColorFams] = useState<Set<string>>(new Set(COLOR_FAMILIES.map(f => f.id)));
 
   // Step 4 — theme & pricing
-  const [themeId, setThemeId] = useState('athletic');
+  const [themeId, setThemeId] = useState(CATALOG_TEMPLATES[0].suggestedThemeId);
   const [markup, setMarkup] = useState(40);
   const [volumeDiscounts, setVolumeDiscounts] = useState(true);
   const [bulkOrdering, setBulkOrdering] = useState(true);
+  const [bannerImage, setBannerImage] = useState<string | null>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
 
   const slug = useMemo(() =>
     (clientName || 'new-store').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), [clientName]);
@@ -119,6 +82,14 @@ export function StoreCreateWizard() {
     [templateProducts, eligibleIds, includedIds],
   );
 
+  // catalog step search — narrows the visible grid only, never the selection
+  const visibleTemplateProducts = useMemo(() => {
+    if (!catalogQuery.trim()) return templateProducts;
+    const q = catalogQuery.toLowerCase();
+    return templateProducts.filter(p =>
+      p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || (STYLE_CODES[p.id] ?? '').toLowerCase().includes(q));
+  }, [templateProducts, catalogQuery]);
+
   const primaryLogoSrc = logos.find(l => l.id === primaryLogoId)?.src
     ?? (clientName ? makeInitialsLogo(clientName, LOGO_BG_CHOICES[0], '#ffffff') : '');
 
@@ -132,6 +103,7 @@ export function StoreCreateWizard() {
         r.onload = () => res(r.result as string);
         r.readAsDataURL(file);
       });
+      // eslint-disable-next-line react-hooks/purity
       next.push({ id: `lg-${Date.now()}-${next.length}`, label: file.name.replace(/\.\w+$/, ''), src: dataUrl });
     }
     const all = [...logos, ...next];
@@ -139,9 +111,19 @@ export function StoreCreateWizard() {
     if (!primaryLogoId && all.length) setPrimaryLogoId(all[0].id);
     if (next.length) {
       const colors = await extractPalette(next[0].src);
-      if (colors.length) setPalette(colors);
+      if (colors.length) {
+        setPalette(colors);
+        applyRecommendations(colors);
+      }
     }
     setAnalyzing(false);
+  }
+
+  // Covver-style: pre-select the garment color families that pair with the logo
+  function applyRecommendations(colors: string[]) {
+    const rec = recommendColorFamilies(colors);
+    setRecommendedFams(rec);
+    if (!colorsTouched.current) setActiveColorFams(new Set(rec));
   }
 
   function useSampleLogo() {
@@ -154,7 +136,11 @@ export function StoreCreateWizard() {
     const all = [...logos, asset];
     setLogos(all);
     if (!primaryLogoId) setPrimaryLogoId(asset.id);
-    if (!palette.length) setPalette([bg, '#f5f7fa', '#c8f135']);
+    if (!palette.length) {
+      const demo = [bg, '#f5f7fa', '#c8f135'];
+      setPalette(demo);
+      applyRecommendations(demo);
+    }
   }
 
   function pickTemplate(id: string) {
@@ -197,6 +183,19 @@ export function StoreCreateWizard() {
       settings: { access: 'public', payment: 'card', bulkOrdering, logoPicker: logos.length > 1 },
       stats: { revenue30d: 0, orders30d: 0, visitors30d: 0, margin30d: 0 },
       orders: [],
+      customTheme: null,
+      bannerImage,
+      brandPalette: palette,
+      discountCodes: [],
+      users: { enabled: false, users: [], rules: [] },
+      seo: {
+        metaTitle: storeName || `${clientName} Store`,
+        metaDescription: `Branded merchandise for ${clientName || 'your community'} — printed on demand and shipped straight to your door.`,
+        keywords: '',
+      },
+      footerContent: defaultFooterContent(clientName || 'our team'),
+      productCustomizations: {},
+      catalogLayout: { mode: 'manual', groups: [] },
     };
     addStore(store);
     setGenerating(true);
@@ -308,12 +307,12 @@ export function StoreCreateWizard() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Customer type</label>
+                  <label className={labelCls}>Customer type <span className="normal-case font-medium text-snp-navy-400">(optional)</span></label>
                   <div className="flex flex-wrap gap-2">
                     {CLIENT_TYPES.map(t => (
                       <button
                         key={t}
-                        onClick={() => setClientType(t)}
+                        onClick={() => setClientType(prev => prev === t ? null : t)}
                         className={`h-10 px-4 rounded-full text-[13px] font-semibold border transition-colors ${
                           clientType === t
                             ? 'bg-snp-navy-950 text-white border-snp-navy-950'
@@ -324,6 +323,7 @@ export function StoreCreateWizard() {
                       </button>
                     ))}
                   </div>
+                  <p className="mt-2 text-[12px] text-snp-navy-400">Helps organize your book of business — click again to deselect.</p>
                 </div>
               </div>
             </div>
@@ -482,6 +482,17 @@ export function StoreCreateWizard() {
 
                   <div className="bg-white rounded-[16px] border border-snp-navy-200 p-4">
                     <div className="text-[11px] font-bold uppercase tracking-wider text-snp-navy-400 mb-2.5">Garment colors</div>
+                    {palette.length > 0 && (
+                      <div className="mb-3 rounded-[10px] bg-snp-purple-50 border border-snp-purple-100 p-2.5">
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-snp-purple-700 mb-1.5">
+                          <Sparkles className="w-3 h-3" /> Recommended for your logo
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {palette.map(c => <span key={c} className="w-4 h-4 rounded-full border border-black/10" style={{ background: c }} />)}
+                          <span className="text-[10.5px] text-snp-navy-500 ml-1">→ {recommendedFams.map(id => COLOR_FAMILIES.find(f => f.id === id)?.label).join(', ')}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       {COLOR_FAMILIES.map(f => (
                         <label key={f.id} className="flex items-center gap-2.5 text-[13px] font-medium text-snp-navy-800 cursor-pointer">
@@ -489,16 +500,22 @@ export function StoreCreateWizard() {
                             type="checkbox"
                             className="accent-[#2563eb] w-3.5 h-3.5"
                             checked={activeColorFams.has(f.id)}
-                            onChange={() => setActiveColorFams(prev => {
-                              const n = new Set(prev);
-                              if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
-                              return n;
-                            })}
+                            onChange={() => {
+                              colorsTouched.current = true;
+                              setActiveColorFams(prev => {
+                                const n = new Set(prev);
+                                if (n.has(f.id)) n.delete(f.id); else n.add(f.id);
+                                return n;
+                              });
+                            }}
                           />
                           <span className="flex gap-1">
                             {f.hexes.map(h => <span key={h} className="w-3.5 h-3.5 rounded-full border border-snp-navy-200" style={{ background: h }} />)}
                           </span>
                           {f.label}
+                          {recommendedFams.includes(f.id) && (
+                            <span className="ml-auto text-[9px] font-bold uppercase tracking-wide text-snp-purple-700 bg-snp-purple-50 px-1.5 py-0.5 rounded-full">✨ Rec</span>
+                          )}
                         </label>
                       ))}
                     </div>
@@ -507,6 +524,23 @@ export function StoreCreateWizard() {
 
                 {/* Live product preview */}
                 <div className="flex-1 min-w-0">
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-snp-navy-400" />
+                    <input
+                      value={catalogQuery}
+                      onChange={e => setCatalogQuery(e.target.value)}
+                      placeholder="Search products by name, brand or style code…"
+                      className="w-full h-11 pl-10 pr-9 bg-white rounded-[12px] border border-snp-navy-200 text-[13px] text-snp-navy-950 placeholder:text-snp-navy-400 outline-none focus:border-snp-indigo-500"
+                    />
+                    {catalogQuery && (
+                      <button
+                        onClick={() => setCatalogQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-snp-navy-400 hover:text-snp-navy-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-baseline justify-between mb-3">
                     <span className="text-[13px] font-bold text-snp-navy-950">
                       {finalIds.length} styles will be generated
@@ -514,7 +548,7 @@ export function StoreCreateWizard() {
                     <span className="text-[12px] text-snp-navy-400">Click any item to include / exclude</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {templateProducts.map(p => {
+                    {visibleTemplateProducts.map(p => {
                       const eligible = eligibleIds.has(p.id);
                       const included = eligible && includedIds.has(p.id);
                       return (
@@ -556,7 +590,7 @@ export function StoreCreateWizard() {
                 Theme & pricing
               </h2>
               <p className="text-[14px] text-snp-navy-600 mb-7">
-                Pick the storefront personality, then set your markup on top of SanMar cost — that margin is yours on every order.
+                Pick the storefront personality, then set your markup on top of Snappy cost — that margin is yours on every order.
               </p>
 
               {/* Themes */}
@@ -592,6 +626,9 @@ export function StoreCreateWizard() {
                   </button>
                 ))}
               </div>
+              <p className="-mt-5 mb-8 text-[12px] text-snp-navy-400">
+                <Sparkles className="w-3 h-3 inline -mt-0.5 text-snp-purple-700" /> Just a starting point — after the store is created you can fully customize the theme in its <b>Design</b> tab: exact hex colors, logos, banner image and storefront copy.
+              </p>
 
               {/* Markup */}
               <div className="bg-white rounded-[18px] border border-snp-navy-200 p-6 mb-5">
@@ -599,7 +636,7 @@ export function StoreCreateWizard() {
                   <span className="text-[15px] font-bold text-snp-navy-950">Your markup</span>
                   <span className="text-[26px] font-bold text-snp-purple-700" style={{ fontFamily: "'Clash Display', sans-serif" }}>+{markup}%</span>
                 </div>
-                <p className="text-[12.5px] text-snp-navy-500 mb-4">Applied on top of your SanMar cost across the store. Fine-tune per item after creation.</p>
+                <p className="text-[12.5px] text-snp-navy-500 mb-4">Applied on top of your Snappy cost across the store. Fine-tune per item after creation.</p>
                 <input
                   type="range" min={0} max={100} step={1} value={markup}
                   onChange={e => setMarkup(Number(e.target.value))}
@@ -612,6 +649,42 @@ export function StoreCreateWizard() {
                   <span className="font-bold text-snp-navy-950">Store price ${(Math.round(22 * (1 + markup / 100) * 2) / 2).toFixed(2)}</span>
                   <span className="ml-auto font-bold text-emerald-600">${(Math.round(22 * (1 + markup / 100) * 2) / 2 - 22).toFixed(2)} margin / unit</span>
                 </div>
+              </div>
+
+              {/* Banner image */}
+              <div className="bg-white rounded-[18px] border border-snp-navy-200 p-6 mb-5">
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-[15px] font-bold text-snp-navy-950">Storefront banner</span>
+                  <span className="text-[11.5px] text-snp-navy-400">Optional — shown across the storefront hero</span>
+                </div>
+                <input
+                  ref={bannerRef} type="file" accept="image/*" className="hidden"
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const raw = await fileToDataUrl(file);
+                    setBannerImage(await resizeImageDataUrl(raw));
+                    e.target.value = '';
+                  }}
+                />
+                {bannerImage ? (
+                  <div className="mt-3 relative rounded-[12px] overflow-hidden border border-snp-navy-200">
+                    <img src={bannerImage} alt="Store banner" className="w-full h-32 object-cover" />
+                    <div className="absolute bottom-2 right-2 flex gap-2">
+                      <button onClick={() => bannerRef.current?.click()} className="h-8 px-3 rounded-[8px] bg-white/90 text-[11.5px] font-bold text-snp-navy-800">Replace</button>
+                      <button onClick={() => setBannerImage(null)} className="h-8 px-3 rounded-[8px] bg-white/90 text-[11.5px] font-bold text-snp-red-600">Remove</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => bannerRef.current?.click()}
+                    className="mt-3 w-full rounded-[12px] border-2 border-dashed border-snp-navy-300 hover:border-snp-indigo-500 hover:bg-snp-indigo-50/50 transition-colors flex flex-col items-center justify-center gap-1.5 h-28 text-snp-navy-500"
+                  >
+                    <Upload className="w-5 h-5" />
+                    <span className="text-[12px] font-semibold">Upload a banner image</span>
+                    <span className="text-[10.5px] text-snp-navy-400">Wide images work best (1600×480+) — JPG or PNG</span>
+                  </button>
+                )}
               </div>
 
               {/* Toggles */}

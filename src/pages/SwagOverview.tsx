@@ -21,9 +21,9 @@ export type SwagTab = 'overview' | 'catalog' | 'your-swag' | 'stores' | 'brands'
 export type YourSwagSubTab = 'my-designs' | 'collections' | 'inventory' | 'shipments';
 
 const SWAG_TABS: { id: SwagTab; label: string; path: string }[] = [
+  { id: 'stores',      label: 'Stores',      path: '/stores' },
   { id: 'overview',    label: 'Discover',    path: '/swag' },
   { id: 'catalog',     label: 'Catalog',     path: '/catalog' },
-  { id: 'stores',      label: 'Stores',      path: '/stores' },
   { id: 'your-swag',   label: 'My Swag',     path: '/designs' },
 ];
 

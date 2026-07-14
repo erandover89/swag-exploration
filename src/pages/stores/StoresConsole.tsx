@@ -1,15 +1,15 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, ExternalLink, Copy, Pause, Play, Archive, MoreHorizontal,
+  Plus, Search, ExternalLink, Copy, Pause, Play, MoreHorizontal, Trash2,
   Store as StoreIcon, DollarSign, TrendingUp, ShoppingCart, ChevronDown, X, Pencil,
 } from 'lucide-react';
 import { useStores } from '../../context/StoresContext';
 import { SwagPageHeader } from '../SwagOverview';
 import { StoreLogo, StoreStatusPill } from '../../components/stores/StoreBits';
-import { fmtMoney, type ClientType, type DistributorStore, type StoreStatus } from '../../data/storesData';
+import { CLIENT_TYPES, fmtMoney, type ClientType, type DistributorStore, type StoreStatus } from '../../data/storesData';
 
-const CLIENT_TYPES: (ClientType | 'All')[] = ['All', 'Team Sports', 'Cafe & Retail', 'Corporate', 'Education', 'Nonprofit'];
+const TYPE_FILTERS: (ClientType | 'All')[] = ['All', ...CLIENT_TYPES];
 const STATUS_FILTERS: { id: StoreStatus | 'all'; label: string }[] = [
   { id: 'all', label: 'All stores' },
   { id: 'live', label: 'Live' },
@@ -83,11 +83,11 @@ function RowMenu({ store, onClose }: { store: DistributorStore; onClose: () => v
       <button
         className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-snp-red-600 hover:bg-snp-red-50 text-left transition-colors"
         onClick={() => {
-          if (confirm(`Archive "${store.name}"? Order history is exported before retirement.`)) removeStore(store.id);
+          if (confirm(`Delete "${store.name}"? This permanently removes the store and its storefront — it can't be undone.`)) removeStore(store.id);
           onClose();
         }}
       >
-        <Archive className="w-3.5 h-3.5" /> Archive store
+        <Trash2 className="w-3.5 h-3.5" /> Delete store
       </button>
     </div>
   );
@@ -95,7 +95,7 @@ function RowMenu({ store, onClose }: { store: DistributorStore; onClose: () => v
 
 export function StoresConsole() {
   const navigate = useNavigate();
-  const { stores, updateStore } = useStores();
+  const { stores, updateStore, removeStore } = useStores();
 
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StoreStatus | 'all'>('all');
@@ -149,7 +149,7 @@ export function StoresConsole() {
                   Your storefronts
                 </h2>
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full" style={{ background: '#eef2ff', color: '#4338ca' }}>
-                  SanMar Distributor Edition
+                  Distributor Edition
                 </span>
               </div>
               <p className="text-[14px] text-snp-navy-600">
@@ -169,7 +169,7 @@ export function StoresConsole() {
           <div className="flex gap-4 mt-6 flex-wrap">
             <KpiCard icon={<StoreIcon className="w-4 h-4" />} label="Live stores" value={String(totals.live)} sub={`${stores.length} total across your book`} accent="#2563eb" />
             <KpiCard icon={<DollarSign className="w-4 h-4" />} label="Storefront sales" value={`$${totals.revenue.toLocaleString()}`} sub="Last 30 days, all stores" accent="#059669" />
-            <KpiCard icon={<TrendingUp className="w-4 h-4" />} label="Your margin" value={`$${totals.margin.toLocaleString()}`} sub="Markup earned on top of SanMar cost" accent="#7c3aed" />
+            <KpiCard icon={<TrendingUp className="w-4 h-4" />} label="Your margin" value={`$${totals.margin.toLocaleString()}`} sub="Markup earned on top of Snappy cost" accent="#7c3aed" />
             <KpiCard icon={<ShoppingCart className="w-4 h-4" />} label="Orders" value={String(totals.orders)} sub="Last 30 days" accent="#ea580c" />
           </div>
         </div>
@@ -205,8 +205,8 @@ export function StoresConsole() {
               <ChevronDown className="w-3.5 h-3.5 text-snp-navy-400" />
             </button>
             {typeOpen && (
-              <div className="absolute left-0 top-12 z-30 w-52 bg-white rounded-[12px] border border-snp-navy-200 shadow-[0px_12px_32px_rgba(1,39,84,0.16)] py-1.5">
-                {CLIENT_TYPES.map(t => (
+              <div className="absolute left-0 top-12 z-30 w-52 max-h-80 overflow-y-auto bg-white rounded-[12px] border border-snp-navy-200 shadow-[0px_12px_32px_rgba(1,39,84,0.16)] py-1.5">
+                {TYPE_FILTERS.map(t => (
                   <button
                     key={t}
                     onClick={() => { setTypeFilter(t); setTypeOpen(false); }}
@@ -263,6 +263,17 @@ export function StoresConsole() {
               onClick={() => alert('Rebrand across selected stores — swap logos, colors and themes in one pass. (Demo)')}
             >
               <TrendingUp className="w-3.5 h-3.5" /> Bulk rebrand
+            </button>
+            <button
+              className="text-[13px] font-semibold text-red-300 hover:text-red-200 flex items-center gap-1.5"
+              onClick={() => {
+                if (confirm(`Permanently delete ${selected.size} store${selected.size > 1 ? 's' : ''}? This can't be undone.`)) {
+                  selected.forEach(id => removeStore(id));
+                  setSelected(new Set());
+                }
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
             <button className="ml-auto text-white/60 hover:text-white" onClick={() => setSelected(new Set())}>
               <X className="w-4 h-4" />
@@ -322,7 +333,7 @@ export function StoresConsole() {
                   </td>
                   <td className="py-3.5">
                     <div className="text-[13px] font-semibold text-snp-navy-800">{store.clientName}</div>
-                    <div className="text-[11.5px] text-snp-navy-400">{store.clientType}</div>
+                    <div className="text-[11.5px] text-snp-navy-400">{store.clientType ?? '—'}</div>
                   </td>
                   <td className="py-3.5"><StoreStatusPill status={store.status} /></td>
                   <td className="py-3.5 text-right text-[13px] font-semibold text-snp-navy-700">{store.productIds.length}</td>
@@ -372,9 +383,6 @@ export function StoresConsole() {
           </table>
         </div>
 
-        <p className="mt-4 text-[12px] text-snp-navy-400">
-          Catalog, inventory and pricing sync nightly from SanMar via PromoStandards · Orders route to SanMar under your account number
-        </p>
       </div>
     </div>
   );

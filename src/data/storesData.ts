@@ -1,15 +1,23 @@
 // ── Distributor Stores — data model, themes, pricing engine, seeds ───────────
-// The Snappy user here is a DISTRIBUTOR (SanMar's customer) managing branded
-// storefronts on behalf of their own customers (leagues, cafes, companies).
-// Pricing model: Snappy/SanMar all-in cost → distributor markup → store price.
+// The Snappy user here is a DISTRIBUTOR managing branded storefronts on behalf
+// of their own customers (leagues, cafes, companies).
+// Pricing model: Snappy charges one set all-in cost to every distributor →
+// distributor markup → store price.
 
-import { PRODUCTS, type Product, type ProductCategory } from './mockData';
+import { PRODUCTS, PRINT_TECHNIQUE_CHIPS, type Product, type ProductCategory, type PrintTechnique } from './mockData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type StoreStatus = 'live' | 'draft' | 'paused';
-export type ClientType = 'Team Sports' | 'Cafe & Retail' | 'Corporate' | 'Education' | 'Nonprofit';
-export type AccessMode = 'public' | 'passcode';
+export type ClientType =
+  | 'Team Sports' | 'Corporate' | 'Retail' | 'Restaurant' | 'Education'
+  | 'Nonprofit' | 'Healthcare' | 'Government' | 'Events & Entertainment' | 'Fitness & Wellness';
+
+export const CLIENT_TYPES: ClientType[] = [
+  'Team Sports', 'Corporate', 'Retail', 'Restaurant', 'Education',
+  'Nonprofit', 'Healthcare', 'Government', 'Events & Entertainment', 'Fitness & Wellness',
+];
+export type AccessMode = 'public' | 'passcode' | 'email-list';
 export type PaymentMode = 'card' | 'points' | 'mixed';
 
 export interface VolumeTier {
@@ -74,12 +82,79 @@ export interface StoreOrder {
   date: string;
 }
 
+export type DiscountType = 'fixed' | 'percent' | 'free-shipping';
+
+export interface DiscountCode {
+  id: string;
+  code: string;              // stored UPPERCASE, matched case-insensitively
+  type: DiscountType;
+  value: number;             // $ for fixed, % for percent, ignored for free-shipping
+  expiresAt: string | null;  // 'YYYY-MM-DD' or null = never expires
+  maxUses: number | null;    // null = unlimited
+  usedCount: number;
+  userEmails: string[];      // [] = anyone may use it
+  productIds: string[];      // [] = applies to the whole cart
+  active: boolean;
+  createdAt: string;
+}
+
+export interface StoreUser {
+  id: string;
+  name: string;
+  email: string;             // stored lowercase — the unique key
+  role: string;
+  department?: string;
+  isAdmin: boolean;
+  discountPct?: number;      // auto-applied to this shopper's cart
+  source: 'csv' | 'manual';
+  addedAt: string;
+}
+
+export interface AccessRule {
+  id: string;
+  field: 'role' | 'department' | 'emailDomain';
+  value: string;
+  effect: 'grant-admin' | 'discount';
+  discountPct?: number;      // when effect === 'discount'
+}
+
+export interface StoreUsersConfig {
+  enabled: boolean;
+  users: StoreUser[];
+  rules: AccessRule[];
+}
+
+export interface StoreSeo { metaTitle: string; metaDescription: string; keywords: string }
+
+export interface StoreFooterContent { ourStory: string; qualityPromise: string; privacy: string; contact: string }
+
+export type ShopperConstraint = 'locked' | 'editable' | 'removable';
+
+export interface StoreProductContent {
+  description: string;
+  specifications: string;
+  aboutBrand: string;
+  custom: { title: string; body: string } | null;   // the one blank admin field
+}
+
+export interface StoreProductCustomization {
+  displayName?: string;
+  content?: StoreProductContent;                    // absent = generated defaults
+  logoByColor?: Record<string, string>;             // product color NAME → store logoId
+  constraints?: Record<string, ShopperConstraint>;  // designer layerId → tri-state (default 'locked')
+  customizable?: boolean;                           // gates the shopper "Customize" button
+}
+
+export type CatalogGroupingMode = 'manual' | 'category' | 'brand' | 'custom';
+export interface CatalogGroup { id: string; label: string; productIds: string[] }
+export interface CatalogLayout { mode: CatalogGroupingMode; groups: CatalogGroup[] }
+
 export interface DistributorStore {
   id: string;
   slug: string;
   name: string;
   clientName: string;
-  clientType: ClientType;
+  clientType: ClientType | null;   // optional — some customers don't fit a bucket
   status: StoreStatus;
   createdAt: string;
   updatedAt: string;
@@ -96,6 +171,52 @@ export interface DistributorStore {
   settings: StoreSettings;
   stats: { revenue30d: number; orders30d: number; visitors30d: number; margin30d: number };
   orders: StoreOrder[];
+  customTheme: StoreTheme | null;   // used when themeId === 'custom'
+  bannerImage: string | null;       // storefront hero banner (downscaled dataURL or data URI)
+  brandPalette: string[];           // colors extracted from the uploaded logo
+  discountCodes: DiscountCode[];
+  users: StoreUsersConfig;
+  seo: StoreSeo;
+  footerContent: StoreFooterContent;
+  productCustomizations: Record<string, StoreProductCustomization>;  // productId →
+  catalogLayout: CatalogLayout;
+}
+
+/** Seed/persisted stores may predate the newer fields — normalizeStore() fills them. */
+type RawStore = Omit<DistributorStore,
+  'customTheme' | 'bannerImage' | 'brandPalette' | 'discountCodes' | 'users' | 'seo' |
+  'footerContent' | 'productCustomizations' | 'catalogLayout'
+> & Partial<Pick<DistributorStore,
+  'customTheme' | 'bannerImage' | 'brandPalette' | 'discountCodes' | 'users' | 'seo' |
+  'footerContent' | 'productCustomizations' | 'catalogLayout'
+>>;
+
+export function defaultFooterContent(clientName: string): StoreFooterContent {
+  return {
+    ourStory: `${clientName} works with a dedicated local distributor to bring you official gear — every item is decorated on demand and shipped straight to your door.`,
+    qualityPromise: 'Every order is inspected before it ships. If your gear arrives damaged or misprinted, we remake it free — no forms, no fuss.',
+    privacy: 'We only collect what we need to fulfill your order. Your details are never sold or shared outside our fulfillment partners.',
+    contact: `Questions about an order? Reach the ${clientName} store team at support@snappy.store and we'll get back to you within one business day.`,
+  };
+}
+
+/** Fill any missing newer fields with defaults — ??-fills only, never overwrites. */
+export function normalizeStore(s: RawStore): DistributorStore {
+  // legacy customer type — 'Cafe & Retail' was split into Retail / Restaurant
+  const clientType: ClientType | null = (s.clientType as string) === 'Cafe & Retail' ? 'Restaurant' : s.clientType ?? null;
+  return {
+    ...s,
+    clientType,
+    customTheme: s.customTheme ?? null,
+    bannerImage: s.bannerImage ?? null,
+    brandPalette: s.brandPalette ?? [],
+    discountCodes: s.discountCodes ?? [],
+    users: s.users ?? { enabled: false, users: [], rules: [] },
+    seo: s.seo ?? { metaTitle: s.name, metaDescription: s.heroSub, keywords: '' },
+    footerContent: s.footerContent ?? defaultFooterContent(s.clientName),
+    productCustomizations: s.productCustomizations ?? {},
+    catalogLayout: s.catalogLayout ?? { mode: 'manual', groups: [] },
+  };
 }
 
 // ── SanMar-style codes for catalog items (real SanMar-distributed brands) ────
@@ -186,6 +307,12 @@ export function getTheme(themeId: string): StoreTheme {
   return STORE_THEMES.find(t => t.id === themeId) ?? STORE_THEMES[2];
 }
 
+/** Resolve a store's active theme — honors a fully custom theme when selected. */
+export function getStoreTheme(store: DistributorStore): StoreTheme {
+  if (store.themeId === 'custom' && store.customTheme) return store.customTheme;
+  return getTheme(store.themeId);
+}
+
 // ── Built-in demo client logos (inline SVG → data URI) ───────────────────────
 
 function svgUri(svg: string): string {
@@ -237,7 +364,7 @@ function initialsLogo(text: string, bg: string, fg: string): string {
 
 // ── Pricing engine ────────────────────────────────────────────────────────────
 
-/** All-in cost the distributor pays Snappy/SanMar (product + decoration + shipping). */
+/** All-in cost the distributor pays Snappy (product + decoration + shipping) — same set price for every distributor. */
 export function baseCost(product: Product): number {
   return product.price;
 }
@@ -297,6 +424,199 @@ export const DEFAULT_TIERS: VolumeTier[] = [
   { qty: 48, discountPct: 22 },
 ];
 
+// ── Shipping, decoration & cart totals ────────────────────────────────────────
+
+export type ShippingMethodId = 'ground' | 'three-day' | 'overnight';
+export interface ShippingMethod { id: ShippingMethodId; label: string; price: number; etaDays: [number, number] }
+
+export const SHIPPING_METHODS: ShippingMethod[] = [
+  { id: 'ground',    label: 'Ground',    price: 0,    etaDays: [5, 7] },
+  { id: 'three-day', label: '3-Day',     price: 12.5, etaDays: [3, 3] },
+  { id: 'overnight', label: 'Overnight', price: 24.5, etaDays: [1, 1] },
+];
+
+export function shippingMethod(id?: ShippingMethodId): ShippingMethod {
+  return SHIPPING_METHODS.find(m => m.id === id) ?? SHIPPING_METHODS[0];
+}
+
+/** Decoration cost baked into the all-in price, split out for display only. */
+export const DECORATION_COST: Record<PrintTechnique, number> = {
+  'embroidery': 7.5, 'dtg': 4.5, 'dtf': 4, 'sublimation': 5,
+  'laser-printing': 3.5, 'uv-printing': 4, 'digital-inkjet': 3, 'digital-printing': 3,
+};
+
+/** Per-unit upcharge when a cart line carries shopper customization. */
+export const CUSTOMIZATION_UPCHARGE = 3;
+
+/** Display-only Garment + Decoration split — always sums exactly to retailPrice(). */
+export function priceBreakdown(store: DistributorStore, product: Product): { garment: number; decoration: number; total: number } {
+  const total = retailPrice(store, product);
+  const decoration = Math.min(
+    roundRetail(DECORATION_COST[product.printTechnique] * (1 + store.pricing.globalMarkupPct / 100)),
+    roundRetail(total * 0.4),
+  );
+  return { garment: Math.round((total - decoration) * 100) / 100, decoration, total };
+}
+
+/** The shopper's auto-applied discount % — max of their user record and any matching rules. */
+export function userDiscountPctFor(store: DistributorStore, email?: string): number {
+  if (!email) return 0;
+  const lower = email.toLowerCase();
+  const user = store.users.users.find(u => u.email === lower);
+  let pct = user?.discountPct ?? 0;
+  for (const rule of store.users.rules) {
+    if (rule.effect !== 'discount' || !rule.discountPct) continue;
+    const matches =
+      (rule.field === 'emailDomain' && lower.endsWith(`@${rule.value.toLowerCase()}`)) ||
+      (rule.field === 'role' && user?.role.toLowerCase() === rule.value.toLowerCase()) ||
+      (rule.field === 'department' && user?.department?.toLowerCase() === rule.value.toLowerCase());
+    if (matches) pct = Math.max(pct, rule.discountPct);
+  }
+  return pct;
+}
+
+export function validateDiscount(
+  store: DistributorStore,
+  raw: string,
+  email?: string,
+  cartProductIds?: string[],
+): { ok: true; code: DiscountCode } | { ok: false; reason: string } {
+  const code = store.discountCodes.find(c => c.code.toLowerCase() === raw.trim().toLowerCase());
+  if (!code) return { ok: false, reason: 'That code isn’t valid for this store.' };
+  if (!code.active) return { ok: false, reason: 'This code is no longer active.' };
+  const today = new Date().toISOString().slice(0, 10);
+  if (code.expiresAt && today > code.expiresAt) return { ok: false, reason: 'This code has expired.' };
+  if (code.maxUses != null && code.usedCount >= code.maxUses) return { ok: false, reason: 'This code has reached its usage limit.' };
+  if (code.userEmails.length) {
+    if (!email) return { ok: false, reason: 'Sign in to use this code.' };
+    if (!code.userEmails.some(e => e.toLowerCase() === email.toLowerCase())) {
+      return { ok: false, reason: 'This code isn’t available on your account.' };
+    }
+  }
+  if (code.productIds.length && cartProductIds && !cartProductIds.some(id => code.productIds.includes(id))) {
+    return { ok: false, reason: 'This code doesn’t apply to anything in your cart.' };
+  }
+  return { ok: true, code };
+}
+
+/** Minimal line shape the totals engine needs — the storefront cart maps onto this. */
+export interface CartLineInput { productId: string; qty: number; customized?: boolean }
+
+export interface CartTotals {
+  units: number;
+  subtotal: number;
+  volumeDiscountPct: number;
+  volumeDiscount: number;
+  userDiscountPct: number;
+  userDiscount: number;
+  codeDiscount: number;
+  freeShipping: boolean;
+  shipping: number;
+  total: number;
+}
+
+const cents = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * One composition path for every money display: subtotal → volume tier →
+ * user discount → discount code → shipping. Each discount applies to the
+ * running remainder so stacked discounts can never exceed 100%.
+ */
+export function computeCartTotals(
+  store: DistributorStore,
+  lines: CartLineInput[],
+  opts: { email?: string; code?: DiscountCode | null; shippingMethodId?: ShippingMethodId } = {},
+): CartTotals {
+  const units = lines.reduce((a, l) => a + l.qty, 0);
+  const lineTotal = (l: CartLineInput) => {
+    const p = PRODUCTS.find(x => x.id === l.productId);
+    if (!p) return 0;
+    return (retailPrice(store, p) + (l.customized ? CUSTOMIZATION_UPCHARGE : 0)) * l.qty;
+  };
+  const subtotal = lines.reduce((a, l) => a + lineTotal(l), 0);
+
+  const tier = tierFor(store, units);
+  const volumeDiscountPct = tier?.discountPct ?? 0;
+  const volumeDiscount = subtotal * volumeDiscountPct / 100;
+  let remaining = subtotal - volumeDiscount;
+
+  const userDiscountPct = userDiscountPctFor(store, opts.email);
+  const userDiscount = remaining * userDiscountPct / 100;
+  remaining -= userDiscount;
+
+  let codeDiscount = 0;
+  let freeShipping = false;
+  const code = opts.code;
+  if (code) {
+    // product-restricted codes discount only the eligible lines' share of the remainder
+    const eligibleSubtotal = code.productIds.length
+      ? lines.filter(l => code.productIds.includes(l.productId)).reduce((a, l) => a + lineTotal(l), 0)
+      : subtotal;
+    const eligibleRemaining = subtotal > 0 ? remaining * (eligibleSubtotal / subtotal) : 0;
+    if (code.type === 'percent') codeDiscount = eligibleRemaining * code.value / 100;
+    else if (code.type === 'fixed') codeDiscount = Math.min(code.value, eligibleRemaining);
+    else freeShipping = true;
+  }
+  remaining -= codeDiscount;
+
+  const shipping = freeShipping ? 0 : shippingMethod(opts.shippingMethodId).price;
+
+  return {
+    units,
+    subtotal: cents(subtotal),
+    volumeDiscountPct,
+    volumeDiscount: cents(volumeDiscount),
+    userDiscountPct,
+    userDiscount: cents(userDiscount),
+    codeDiscount: cents(codeDiscount),
+    freeShipping,
+    shipping: cents(shipping),
+    total: cents(Math.max(0, remaining + shipping)),
+  };
+}
+
+// ── Product content defaults (Products tab editor + storefront PDP) ──────────
+
+const BRAND_BLURBS: Record<string, string> = {
+  'Nike': 'Founded at the University of Oregon track, Nike engineers performance gear trusted by athletes at every level — from first practice to championship day.',
+  'Bella + Canvas': 'Bella + Canvas makes the softest tees in the game, cut and sewn with eco-conscious processes in a platinum-certified WRAP facility.',
+  'Carhartt': 'Since 1889, Carhartt has built rugged workwear that outlasts the job — union-made heritage, triple-stitched seams, zero compromises.',
+  'Stanley/Stella': 'Stanley/Stella crafts premium organic-cotton staples in certified factories — fashion-fit silhouettes with a radically transparent supply chain.',
+  'Gildan': 'Gildan is the world’s go-to blank apparel maker — reliable fits, consistent sizing, and mills powered increasingly by renewable energy.',
+  'Under Armour': 'Born from a football field insight about sweat-soaked cotton, Under Armour builds moisture-wicking performance gear for training and game day.',
+  'TravisMathew': 'TravisMathew brings Southern California ease to premium apparel and headwear — clean lines, soft hand feel, clubhouse-to-street versatility.',
+  'Hydro Flask': 'Hydro Flask started at a Bend, Oregon farmers market and now sets the standard for insulated stainless drinkware with TempShield technology.',
+  'Klean Kanteen': 'Family-owned and climate-neutral certified, Klean Kanteen pioneered the stainless water bottle and gives 1% of sales to environmental causes.',
+  'Baggu': 'Baggu designs simple, functional bags with playful color — durable recycled materials and a cult following from farmers markets to fashion week.',
+  'Adidas': 'Three stripes, endless history — adidas blends sport heritage with everyday utility, increasingly built from recycled and renewed materials.',
+  'Patagonia': 'Patagonia builds the best product while causing no unnecessary harm — Fair Trade sewn, recycled fabrics, and guaranteed for life.',
+  'The North Face': 'Born in Berkeley in 1966, The North Face equips explorers everywhere — summit-tested insulation and fabrics that shrug off the elements.',
+  'Tentree': 'Every Tentree item plants ten trees. Earth-first fabrics, certified B Corp, and over 100 million trees in the ground so far.',
+  'Marine Layer': 'Marine Layer makes absurdly soft clothes from custom MicroModal fabric — designed in San Francisco for permanent weekend energy.',
+  'Vans': 'Since 1966, Vans has been the original action-sports footwear brand — waffle soles, canvas classics, and creative self-expression.',
+  'Casetify': 'Casetify turns phones into canvases — impact-tested protection, UV-printed artwork, and collabs with artists worldwide.',
+  'Fujifilm': 'Fujifilm’s instax line made photography tangible again — instant credit-card prints that turn any event into a keepsake.',
+  'Le Creuset': 'Cast in the same French foundry since 1925, Le Creuset enameled cookware is passed down generations — color, craft, and lifetime durability.',
+};
+
+export function defaultProductContent(product: Product): StoreProductContent {
+  const chip = PRINT_TECHNIQUE_CHIPS[product.printTechnique];
+  const specs = [
+    `Decoration: ${chip.label}`,
+    `Available sizes: ${product.sizes.join(', ')}`,
+    `Colorways: ${product.colors.map(c => c.name).join(', ')}`,
+    product.shippingIncluded ? 'Printed on demand — no minimums' : `Minimum order: ${product.minQuantity ?? 1} units`,
+    product.leadTimeDays ? `Production lead time: ${product.leadTimeDays} days` : 'Ships in 3–5 business days',
+  ].join('\n');
+  return {
+    description: product.description,
+    specifications: specs,
+    aboutBrand: BRAND_BLURBS[product.brand]
+      ?? `${product.brand} is a trusted name in its category, chosen for consistent quality and dependable decoration results.`,
+    custom: null,
+  };
+}
+
 // ── Seed orders ───────────────────────────────────────────────────────────────
 
 function seedOrders(prefix: string, rows: [string, number, number, StoreOrder['status'], string][], marginRate: number): StoreOrder[] {
@@ -310,7 +630,19 @@ function seedOrders(prefix: string, rows: [string, number, number, StoreOrder['s
 
 // ── Seed stores ───────────────────────────────────────────────────────────────
 
-export const SEED_STORES: DistributorStore[] = [
+/** Wide hero banner as an inline SVG data URI (kept tiny vs. real photography). */
+function bannerSvg(bg: string, accent: string, accent2: string): string {
+  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 480">
+<rect width="1600" height="480" fill="${bg}"/>
+<path d="M-100 480 L500 -80 L640 -80 L40 480 Z" fill="${accent}" opacity="0.16"/>
+<path d="M200 480 L800 -80 L870 -80 L270 480 Z" fill="${accent}" opacity="0.32"/>
+<path d="M1100 480 L1500 80 L1600 80 L1600 200 L1320 480 Z" fill="${accent2}" opacity="0.22"/>
+<circle cx="1380" cy="120" r="180" fill="${accent}" opacity="0.10"/>
+<circle cx="120" cy="60" r="90" fill="${accent2}" opacity="0.12"/>
+</svg>`);
+}
+
+const RAW_SEED_STORES: RawStore[] = [
   {
     id: 'st-ridgeline',
     slug: 'ridgeline-united',
@@ -329,7 +661,7 @@ export const SEED_STORES: DistributorStore[] = [
     heroHeadline: 'Wear the crest.',
     heroSub: 'Official Ridgeline United FC gear — jerseys, hoodies and training kit for players, parents and fans.',
     announcement: 'Fall season kit drop is live — order by Aug 15 for first-practice delivery',
-    productIds: ['13', '27', '5', '22', '4', '15', '25', '9', '2', '8', '6', '14'],
+    productIds: ['13', '27', '5', '22', '4', '15', '25', '2', '8', '6', '14'],
     featuredIds: ['13', '22', '25', '14'],
     hiddenIds: [],
     pricing: {
@@ -348,13 +680,40 @@ export const SEED_STORES: DistributorStore[] = [
       ['Tom Okafor', 2, 71.0, 'Delivered', 'Jul 7'],
       ['Sarah Jennings (U10)', 5, 148.5, 'Delivered', 'Jul 5'],
     ], 0.295),
+    bannerImage: bannerSvg('#0e1116', '#c8f135', '#5eead4'),
+    brandPalette: ['#0d1b2a', '#c8f135', '#f5f7fa'],
+    discountCodes: [
+      { id: 'dc-welcome', code: 'WELCOME10', type: 'percent', value: 10, expiresAt: null, maxUses: null, usedCount: 38, userEmails: [], productIds: [], active: true, createdAt: '2026-06-01' },
+      { id: 'dc-team', code: 'TEAM25', type: 'fixed', value: 25, expiresAt: '2026-09-01', maxUses: 100, usedCount: 12, userEmails: [], productIds: [], active: true, createdAt: '2026-06-20' },
+      { id: 'dc-ship', code: 'FALLKIT', type: 'free-shipping', value: 0, expiresAt: '2026-08-15', maxUses: null, usedCount: 51, userEmails: [], productIds: [], active: true, createdAt: '2026-07-01' },
+    ],
+    users: {
+      enabled: true,
+      users: [
+        { id: 'u-1', name: 'Dana Alvarez', email: 'd.alvarez@ridgelineunited.org', role: 'Coach', department: 'U12', isAdmin: true, discountPct: 15, source: 'csv', addedAt: '2026-06-15' },
+        { id: 'u-2', name: 'Karen Mitchell', email: 'k.mitchell@ridgelineunited.org', role: 'Team Manager', department: 'U12', isAdmin: false, discountPct: 10, source: 'csv', addedAt: '2026-06-15' },
+        { id: 'u-3', name: 'Jordan Whitfield', email: 'j.whitfield@ridgelineunited.org', role: 'Booster Club', department: 'Club', isAdmin: false, discountPct: 10, source: 'csv', addedAt: '2026-06-15' },
+        { id: 'u-4', name: 'Priya Raman', email: 'priya.raman@gmail.com', role: 'Parent', department: 'U10', isAdmin: false, source: 'csv', addedAt: '2026-06-15' },
+        { id: 'u-5', name: 'Tom Okafor', email: 'tom.okafor@gmail.com', role: 'Parent', department: 'U14', isAdmin: false, source: 'csv', addedAt: '2026-06-15' },
+        { id: 'u-6', name: 'Sarah Jennings', email: 's.jennings@outlook.com', role: 'Parent', department: 'U10', isAdmin: false, source: 'csv', addedAt: '2026-06-15' },
+      ],
+      rules: [
+        { id: 'r-1', field: 'role', value: 'Coach', effect: 'discount', discountPct: 15 },
+        { id: 'r-2', field: 'emailDomain', value: 'ridgelineunited.org', effect: 'discount', discountPct: 10 },
+      ],
+    },
+    seo: {
+      metaTitle: 'Ridgeline United FC Official Team Store — Jerseys, Hoodies & Fan Gear',
+      metaDescription: 'Shop official Ridgeline United FC gear. Jerseys, hoodies, beanies and training kit for players, parents and fans — printed on demand, shipped to your door.',
+      keywords: 'ridgeline united, team store, soccer merch, spirit wear, club gear',
+    },
   },
   {
     id: 'st-driftwood',
     slug: 'driftwood-coffee',
     name: 'Driftwood Coffee Merch',
     clientName: 'Driftwood Coffee Roasters',
-    clientType: 'Cafe & Retail',
+    clientType: 'Restaurant',
     status: 'live',
     createdAt: '2026-05-20',
     updatedAt: '2026-07-08',
@@ -367,7 +726,7 @@ export const SEED_STORES: DistributorStore[] = [
     heroHeadline: 'Goods for slow mornings.',
     heroSub: 'Small-batch merch from your neighborhood roastery — heavyweight tees, cozy knits and the tote that carries the beans.',
     announcement: 'Every order includes a free bag of our Harbor House blend ☕',
-    productIds: ['27', '22', '25', '6', '8', '2', '16', '26', '3', '9'],
+    productIds: ['27', '22', '25', '6', '8', '2', '16', '26', '3'],
     featuredIds: ['22', '6', '25', '8'],
     hiddenIds: [],
     pricing: {
@@ -422,6 +781,29 @@ export const SEED_STORES: DistributorStore[] = [
       ['Marcus Lee', 1, 214.0, 'Delivered', 'Jul 8'],
       ['Studio team — A. Kowalski', 6, 486.0, 'Delivered', 'Jul 4'],
     ], 0.275),
+    bannerImage: bannerSvg('#0f172a', '#4f46e5', '#06b6d4'),
+    brandPalette: ['#4f46e5', '#06b6d4', '#0f172a'],
+    discountCodes: [
+      { id: 'dc-newhire', code: 'NEWHIRE', type: 'percent', value: 100, expiresAt: null, maxUses: null, usedCount: 41, userEmails: ['onboarding@meridianco.com'], productIds: [], active: true, createdAt: '2026-06-05' },
+      { id: 'dc-summit', code: 'SUMMIT20', type: 'percent', value: 20, expiresAt: '2026-09-30', maxUses: 200, usedCount: 87, userEmails: [], productIds: [], active: true, createdAt: '2026-06-28' },
+    ],
+    users: {
+      enabled: true,
+      users: [
+        { id: 'u-1', name: 'Dana Whitworth', email: 'dana.w@meridianco.com', role: 'Partner', department: 'Leadership', isAdmin: true, discountPct: 20, source: 'manual', addedAt: '2026-06-05' },
+        { id: 'u-2', name: 'Marcus Lee', email: 'marcus.lee@meridianco.com', role: 'Designer', department: 'Studio', isAdmin: false, source: 'csv', addedAt: '2026-06-05' },
+        { id: 'u-3', name: 'Ana Kowalski', email: 'ana.k@meridianco.com', role: 'Producer', department: 'Studio', isAdmin: false, source: 'csv', addedAt: '2026-06-05' },
+        { id: 'u-4', name: 'People Ops', email: 'onboarding@meridianco.com', role: 'Operations', department: 'People', isAdmin: true, discountPct: 100, source: 'manual', addedAt: '2026-06-05' },
+      ],
+      rules: [
+        { id: 'r-1', field: 'emailDomain', value: 'meridianco.com', effect: 'discount', discountPct: 10 },
+      ],
+    },
+    seo: {
+      metaTitle: 'Meridian & Co. Brand Store — Premium Agency Apparel & Gifts',
+      metaDescription: 'Client gifting and team essentials for Meridian & Co. Premium branded apparel and everyday carry, decorated on demand.',
+      keywords: 'meridian, agency merch, client gifts, branded apparel',
+    },
   },
   {
     id: 'st-lakeside',
@@ -438,7 +820,7 @@ export const SEED_STORES: DistributorStore[] = [
     heroHeadline: 'Play ball, Lakeside.',
     heroSub: 'Spirit wear for the whole league — from tee-ball to majors.',
     announcement: 'Opening day pre-orders now open',
-    productIds: ['27', '13', '4', '25', '9', '2', '6'],
+    productIds: ['27', '13', '4', '25', '2', '6'],
     featuredIds: ['27', '25'],
     hiddenIds: [],
     pricing: { globalMarkupPct: 40, productOverrides: {}, volumeTiers: DEFAULT_TIERS, showBulkSavings: true },
@@ -487,8 +869,8 @@ export const SEED_STORES: DistributorStore[] = [
     heroHeadline: 'Run the ridge.',
     heroSub: 'Club singlets, trail layers and race-day essentials.',
     announcement: 'Fall trail series registration merch is here',
-    productIds: ['13', '27', '15', '9', '25', '2', '8'],
-    featuredIds: ['13', '9'],
+    productIds: ['13', '27', '15', '25', '2', '8'],
+    featuredIds: ['13', '25'],
     hiddenIds: [],
     pricing: { globalMarkupPct: 30, productOverrides: {}, volumeTiers: [{ qty: 12, discountPct: 10 }], showBulkSavings: false },
     settings: { access: 'public', payment: 'card', bulkOrdering: false, logoPicker: false },
@@ -513,22 +895,34 @@ export const SEED_STORES: DistributorStore[] = [
     heroHeadline: 'Crew gear that works.',
     heroSub: 'Uniform program for Northgate field technicians.',
     announcement: 'Summer uniform refresh',
-    productIds: ['5', '4', '15', '25', '9'],
+    productIds: ['5', '4', '15', '25'],
     featuredIds: ['5'],
     hiddenIds: [],
     pricing: { globalMarkupPct: 25, productOverrides: {}, volumeTiers: [{ qty: 24, discountPct: 15 }], showBulkSavings: true },
-    settings: { access: 'passcode', passcode: 'CREW', payment: 'card', bulkOrdering: true, logoPicker: false },
+    settings: { access: 'email-list', payment: 'card', bulkOrdering: true, logoPicker: false },
     stats: { revenue30d: 0, orders30d: 0, visitors30d: 12, margin30d: 0 },
     orders: seedOrders('NG', [
       ['Field ops — spring uniforms', 60, 2280.0, 'Delivered', 'May 12'],
     ], 0.2),
+    users: {
+      enabled: true,
+      users: [
+        { id: 'u-1', name: 'Ray Delgado', email: 'r.delgado@northgatehvac.com', role: 'Field Supervisor', department: 'Field Ops', isAdmin: true, discountPct: 20, source: 'csv', addedAt: '2026-05-01' },
+        { id: 'u-2', name: 'Sam Porter', email: 's.porter@northgatehvac.com', role: 'Technician', department: 'Field Ops', isAdmin: false, source: 'csv', addedAt: '2026-05-01' },
+        { id: 'u-3', name: 'Lena Fischer', email: 'l.fischer@northgatehvac.com', role: 'Technician', department: 'Field Ops', isAdmin: false, source: 'csv', addedAt: '2026-05-01' },
+        { id: 'u-4', name: 'Office — Dispatch', email: 'dispatch@northgatehvac.com', role: 'Dispatch', department: 'Office', isAdmin: false, source: 'csv', addedAt: '2026-05-01' },
+      ],
+      rules: [
+        { id: 'r-1', field: 'emailDomain', value: 'northgatehvac.com', effect: 'discount', discountPct: 100 },
+      ],
+    },
   },
   {
     id: 'st-bluebird',
     slug: 'bluebird-bakery',
     name: 'Bluebird Bakery Shop',
     clientName: 'Bluebird Bakery',
-    clientType: 'Cafe & Retail',
+    clientType: 'Restaurant',
     status: 'draft',
     createdAt: '2026-07-12',
     updatedAt: '2026-07-12',
@@ -548,6 +942,8 @@ export const SEED_STORES: DistributorStore[] = [
   },
 ];
 
+export const SEED_STORES: DistributorStore[] = RAW_SEED_STORES.map(normalizeStore);
+
 // ── Catalog templates for the creation wizard ────────────────────────────────
 
 export interface CatalogTemplate {
@@ -561,11 +957,19 @@ export interface CatalogTemplate {
 
 export const CATALOG_TEMPLATES: CatalogTemplate[] = [
   {
+    id: 'full-catalog',
+    name: 'Full Catalog',
+    desc: 'Start from the complete catalog — every style, color and size — then curate down.',
+    emoji: '📦',
+    productIds: PRODUCTS.filter(p => p.image.startsWith('/') && p.id !== '9').map(p => p.id),
+    suggestedThemeId: 'modern',
+  },
+  {
     id: 'team-sports',
     name: 'Team Sports Store',
     desc: 'Performance tees, hoodies, beanies and sideline gear — built for leagues, clubs and spirit wear.',
     emoji: '🏆',
-    productIds: ['13', '27', '5', '22', '4', '15', '25', '9', '2', '8', '6', '14'],
+    productIds: ['13', '27', '5', '22', '4', '15', '25', '2', '8', '6', '14'],
     suggestedThemeId: 'athletic',
   },
   {
@@ -578,19 +982,11 @@ export const CATALOG_TEMPLATES: CatalogTemplate[] = [
   },
   {
     id: 'cafe-retail',
-    name: 'Cafe & Retail Store',
+    name: 'Retail & Hospitality Store',
     desc: 'Heavyweight tees, cozy knits, totes and counter-side merch for shops with a loyal following.',
     emoji: '☕',
     productIds: ['27', '22', '25', '6', '8', '2', '16', '26', '3'],
     suggestedThemeId: 'artisan',
-  },
-  {
-    id: 'full-catalog',
-    name: 'Full SanMar Catalog',
-    desc: 'Start from the complete synced catalog — every style, color and size — then curate down.',
-    emoji: '📦',
-    productIds: PRODUCTS.filter(p => p.image.startsWith('/')).map(p => p.id),
-    suggestedThemeId: 'varsity',
   },
 ];
 

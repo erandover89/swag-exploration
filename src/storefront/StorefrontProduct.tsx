@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BadgeCheck, ChevronLeft, Grid3X3, Minus, Plus, ShoppingBag, Truck } from 'lucide-react';
-import { fmtMoney, retailPrice, tierFor, tierPrice, visibleProducts } from '../data/storesData';
-import { storeLogoSrc, StoreProductImage } from '../components/stores/StoreBits';
-import { productById, SfButton, useSf } from './StorefrontShell';
+import { BadgeCheck, ChevronLeft, Grid3X3, Minus, Pencil, Plus, Ruler, ShoppingBag, Truck, Wand2, X } from 'lucide-react';
+import { CUSTOMIZATION_UPCHARGE, defaultProductContent, fmtMoney, priceBreakdown, retailPrice, tierFor, tierPrice, visibleProducts } from '../data/storesData';
+import { storeLogoSrc } from '../components/stores/StoreBits';
+import { productById, SfButton, useSf, type LineCustomization } from './StorefrontShell';
 import { ProductCardSf } from './StorefrontHome';
+import { ProductGallery } from './ProductGallery';
+import { SizeChartModal } from './sizeCharts';
+import { StorefrontCustomizer } from './StorefrontCustomizer';
 
 export function StorefrontProduct() {
   const { pid } = useParams<{ pid: string }>();
@@ -17,6 +20,9 @@ export function StorefrontProduct() {
   const [logoId, setLogoId] = useState(store.primaryLogoId);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkQty, setBulkQty] = useState<Record<string, number>>({});
+  const [showSizeChart, setShowSizeChart] = useState(false);
+  const [showCustomizer, setShowCustomizer] = useState(false);
+  const [customization, setCustomization] = useState<LineCustomization | undefined>();
 
   const related = useMemo(
     () => visibleProducts(store).filter(p => p.id !== pid).slice(0, 4),
@@ -32,20 +38,26 @@ export function StorefrontProduct() {
     );
   }
 
-  const unit = retailPrice(store, product);
+  const customizationCfg = store.productCustomizations[product.id];
+  const content = customizationCfg?.content ?? defaultProductContent(product);
+  const displayName = customizationCfg?.displayName || product.name;
+
+  const unit = retailPrice(store, product) + (customization ? CUSTOMIZATION_UPCHARGE : 0);
   const tiers = [...store.pricing.volumeTiers].sort((a, b) => a.qty - b.qty);
   const bulkTotalUnits = Object.values(bulkQty).reduce((a, b) => a + b, 0);
   const effectiveUnits = bulkMode ? bulkTotalUnits : qty;
   const activeTier = tierFor(store, effectiveUnits);
-  const effectiveUnit = tierPrice(store, product, effectiveUnits);
-  const logoSrc = storeLogoSrc(store, logoId);
+  const effectiveUnit = tierPrice(store, product, effectiveUnits) + (customization ? CUSTOMIZATION_UPCHARGE : 0);
+  // the admin can pin a specific logo per colorway; the shopper picker overrides it
+  const colorLogoId = customizationCfg?.logoByColor?.[color];
+  const logoSrc = storeLogoSrc(store, logoId !== store.primaryLogoId ? logoId : (colorLogoId || logoId));
 
   const addToCart = () => {
     if (bulkMode) {
-      addLines(product.sizes.map(s => ({ productId: product.id, size: s, qty: bulkQty[s] ?? 0, logoId })));
+      addLines(product.sizes.map(s => ({ productId: product.id, size: s, qty: bulkQty[s] ?? 0, logoId, customization })));
       setBulkQty({});
     } else {
-      addLines([{ productId: product.id, size, qty, logoId }]);
+      addLines([{ productId: product.id, size, qty, logoId, customization }]);
     }
   };
 
@@ -66,8 +78,13 @@ export function StorefrontProduct() {
       <div className="grid lg:grid-cols-2 gap-10 items-start">
         {/* ── Gallery ── */}
         <div className="lg:sticky lg:top-24">
-          <div className="relative bg-white overflow-hidden" style={{ borderRadius: `calc(var(--sf-radius) * 1.4)`, border: '1px solid var(--sf-border)' }}>
-            <StoreProductImage product={product} logoSrc={logoSrc} className="h-[440px] p-10" />
+          <div className="relative">
+            <ProductGallery
+              product={product}
+              logoSrc={logoSrc}
+              tintHex={product.colors.find(c => c.name === color)?.hex}
+              overridePreview={customization?.previewDataUrl}
+            />
             {activeTier && (
               <span className="absolute top-4 left-4 text-[11px] font-bold px-2.5 py-1.5" style={{ background: 'var(--sf-accent)', color: '#fff', borderRadius: 'calc(var(--sf-radius) / 1.5)' }}>
                 {activeTier.discountPct}% volume discount applied
@@ -86,16 +103,54 @@ export function StorefrontProduct() {
             {product.brand} · {product.category}
           </div>
           <h1 className="text-[32px] leading-tight mb-3" style={{ fontFamily: theme.fontDisplay, fontWeight: theme.displayWeight, textTransform: theme.displayTransform, letterSpacing: theme.displayTracking }}>
-            {product.name}
+            {displayName}
           </h1>
 
-          <div className="flex items-baseline gap-3 mb-5">
-            <span className="text-[26px] font-bold">{fmtMoney(effectiveUnit)}</span>
-            {activeTier && <span className="text-[15px] line-through" style={{ color: 'var(--sf-sub)' }}>{fmtMoney(unit)}</span>}
-            <span className="text-[12px]" style={{ color: 'var(--sf-sub)' }}>shipping & tax included</span>
+          <div className="mb-5">
+            <div className="flex items-baseline gap-3">
+              <span className="text-[26px] font-bold">{fmtMoney(effectiveUnit)}</span>
+              {activeTier && <span className="text-[15px] line-through" style={{ color: 'var(--sf-sub)' }}>{fmtMoney(unit)}</span>}
+            </div>
+            {(() => {
+              const bd = priceBreakdown(store, product);
+              return (
+                <div className="text-[12px] mt-0.5" style={{ color: 'var(--sf-sub)' }}>
+                  Garment {fmtMoney(bd.garment)} + Decoration {fmtMoney(bd.decoration)} · shipping calculated at checkout
+                </div>
+              );
+            })()}
           </div>
 
-          <p className="text-[13.5px] leading-relaxed mb-6 max-w-md" style={{ color: 'var(--sf-sub)' }}>{product.description}</p>
+          <p className="text-[13.5px] leading-relaxed mb-6 max-w-md" style={{ color: 'var(--sf-sub)' }}>{content.description}</p>
+
+          {/* Shopper customization */}
+          {customizationCfg?.customizable && (
+            <div className="mb-5">
+              {customization ? (
+                <div className="flex items-center gap-2.5 px-3.5 py-3" style={{ border: '1.5px dashed var(--sf-primary)', borderRadius: 'var(--sf-radius)', background: 'color-mix(in srgb, var(--sf-primary) 6%, transparent)' }}>
+                  <Wand2 className="w-4 h-4 shrink-0" style={{ color: 'var(--sf-primary)' }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-bold">Customized — +{fmtMoney(CUSTOMIZATION_UPCHARGE)}/item</div>
+                    <div className="text-[11.5px] truncate" style={{ color: 'var(--sf-sub)' }}>{customization.summary}</div>
+                  </div>
+                  <button onClick={() => setShowCustomizer(true)} title="Edit customization" className="w-8 h-8 flex items-center justify-center hover:opacity-70" style={{ color: 'var(--sf-primary)' }}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setCustomization(undefined)} title="Remove customization" className="w-8 h-8 flex items-center justify-center hover:opacity-70" style={{ color: 'var(--sf-sub)' }}>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowCustomizer(true)}
+                  className="w-full flex items-center justify-center gap-2 h-12 text-[13.5px] font-bold transition-opacity hover:opacity-80"
+                  style={{ border: '1.5px dashed var(--sf-primary)', color: 'var(--sf-primary)', borderRadius: 'var(--sf-radius)' }}
+                >
+                  <Wand2 className="w-4 h-4" /> Customize — move the logo, add text or your own artwork
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Colors */}
           <div className="mb-5">
@@ -134,8 +189,17 @@ export function StorefrontProduct() {
 
           {/* Size / bulk toggle */}
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--sf-sub)' }}>
+            <span className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--sf-sub)' }}>
               {bulkMode ? 'Quantities by size' : 'Size'}
+              {product.category === 'Apparel' && (
+                <button
+                  onClick={() => setShowSizeChart(true)}
+                  className="flex items-center gap-1 normal-case tracking-normal text-[11.5px] font-bold hover:opacity-70"
+                  style={{ color: 'var(--sf-primary)' }}
+                >
+                  <Ruler className="w-3.5 h-3.5" /> Size chart
+                </button>
+              )}
             </span>
             {store.settings.bulkOrdering && product.sizes.length > 1 && (
               <button
@@ -226,11 +290,39 @@ export function StorefrontProduct() {
           )}
 
           <div className="space-y-2 text-[12.5px] font-medium" style={{ color: 'var(--sf-sub)' }}>
-            <div className="flex items-center gap-2"><Truck className="w-4 h-4" style={{ color: 'var(--sf-primary)' }} /> Printed on demand · ships in 3–5 business days</div>
+            <div className="flex items-center gap-2"><Truck className="w-4 h-4" style={{ color: 'var(--sf-primary)' }} /> Printed on demand · choose Ground, 3-Day or Overnight at checkout</div>
             <div className="flex items-center gap-2"><BadgeCheck className="w-4 h-4" style={{ color: 'var(--sf-primary)' }} /> Decoration: {product.printTechnique.replace('-', ' ')} · sizes {product.sizes[0]}–{product.sizes.at(-1)}</div>
+          </div>
+
+          {/* Content sections */}
+          <div className="mt-8 space-y-4">
+            {([
+              ['Specifications', content.specifications],
+              ['About the brand', content.aboutBrand],
+              ...(content.custom?.title && content.custom.body ? [[content.custom.title, content.custom.body] as [string, string]] : []),
+            ] as [string, string][]).map(([title, body]) => (
+              <details key={title} className="group" style={{ borderTop: '1px solid var(--sf-border)' }}>
+                <summary className="flex items-center justify-between py-3.5 cursor-pointer list-none text-[13.5px] font-bold hover:opacity-75">
+                  {title}
+                  <Plus className="w-4 h-4 transition-transform group-open:rotate-45" style={{ color: 'var(--sf-sub)' }} />
+                </summary>
+                <p className="text-[13px] leading-relaxed whitespace-pre-line pb-4 max-w-md" style={{ color: 'var(--sf-sub)' }}>{body}</p>
+              </details>
+            ))}
           </div>
         </div>
       </div>
+
+      {showSizeChart && <SizeChartModal product={product} onClose={() => setShowSizeChart(false)} />}
+      {showCustomizer && (
+        <StorefrontCustomizer
+          store={store}
+          product={product}
+          initial={customization}
+          onSave={c => { setCustomization(c); setShowCustomizer(false); }}
+          onClose={() => setShowCustomizer(false)}
+        />
+      )}
 
       {/* Related */}
       {related.length > 0 && (

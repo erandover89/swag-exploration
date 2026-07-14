@@ -60,26 +60,36 @@ export function StorefrontHome() {
     <div>
       {/* ── Hero ── */}
       <section className="relative overflow-hidden" style={{ background: 'var(--sf-hero-bg)', color: 'var(--sf-hero-ink)' }}>
-        {/* backdrop graphics */}
-        <div
-          className="absolute -right-32 -top-40 w-[520px] h-[520px] rounded-full pointer-events-none"
-          style={{ background: 'var(--sf-primary)', opacity: 0.16, filter: 'blur(10px)' }}
-        />
-        <div
-          className="absolute right-56 -bottom-52 w-[420px] h-[420px] rounded-full pointer-events-none"
-          style={{ background: 'var(--sf-accent)', opacity: 0.13 }}
-        />
-        <div
-          className="absolute inset-0 pointer-events-none select-none overflow-hidden hidden lg:block"
-          aria-hidden
-        >
-          <span
-            className="absolute -bottom-8 left-0 whitespace-nowrap text-[150px] leading-none"
-            style={{ fontFamily: theme.fontDisplay, fontWeight: theme.displayWeight, textTransform: theme.displayTransform, opacity: 0.05, letterSpacing: '-0.02em' }}
-          >
-            {store.clientName} · {store.clientName}
-          </span>
-        </div>
+        {store.bannerImage ? (
+          <>
+            {/* admin-uploaded banner + legibility scrim */}
+            <img src={store.bannerImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.3) 55%, rgba(0,0,0,0.1) 100%)' }} />
+          </>
+        ) : (
+          <>
+            {/* backdrop graphics */}
+            <div
+              className="absolute -right-32 -top-40 w-[520px] h-[520px] rounded-full pointer-events-none"
+              style={{ background: 'var(--sf-primary)', opacity: 0.16, filter: 'blur(10px)' }}
+            />
+            <div
+              className="absolute right-56 -bottom-52 w-[420px] h-[420px] rounded-full pointer-events-none"
+              style={{ background: 'var(--sf-accent)', opacity: 0.13 }}
+            />
+            <div
+              className="absolute inset-0 pointer-events-none select-none overflow-hidden hidden lg:block"
+              aria-hidden
+            >
+              <span
+                className="absolute -bottom-8 left-0 whitespace-nowrap text-[150px] leading-none"
+                style={{ fontFamily: theme.fontDisplay, fontWeight: theme.displayWeight, textTransform: theme.displayTransform, opacity: 0.05, letterSpacing: '-0.02em' }}
+              >
+                {store.clientName} · {store.clientName}
+              </span>
+            </div>
+          </>
+        )}
 
         <div className="relative max-w-[1200px] mx-auto px-5 md:px-10 py-16 md:py-24 grid lg:grid-cols-2 gap-12 items-center">
           <div>
