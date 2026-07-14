@@ -82,7 +82,7 @@ export function StorefrontProduct() {
             <ProductGallery
               product={product}
               logoSrc={logoSrc}
-              tintHex={product.colors.find(c => c.name === color)?.hex}
+              colorName={color}
               overridePreview={customization?.previewDataUrl}
             />
             {activeTier && (

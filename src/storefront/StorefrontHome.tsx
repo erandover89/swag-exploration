@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, BadgeCheck, Globe2, Sparkles, Truck } from 'lucide-react';
 import { retailPrice, storeCategories, visibleProducts, fmtMoney, tierFor } from '../data/storesData';
-import { storeLogoSrc, StoreProductImage } from '../components/stores/StoreBits';
+import { StoreProductMockup } from '../components/stores/StoreBits';
 import { SfButton, useSf } from './StorefrontShell';
 import type { Product } from '../data/mockData';
 
@@ -16,7 +16,7 @@ function ProductCardSf({ p }: { p: Product }) {
       style={{ background: 'var(--sf-surface)', border: '1px solid var(--sf-border)', borderRadius: 'var(--sf-radius)' }}
     >
       <div className="relative bg-white">
-        <StoreProductImage product={p} logoSrc={storeLogoSrc(store)} className="h-56 p-5 transition-transform duration-300 group-hover:scale-[1.04]" />
+        <StoreProductMockup store={store} product={p} className="h-56 p-5 transition-transform duration-300 group-hover:scale-[1.04]" />
         {tier && (
           <span
             className="absolute bottom-2.5 left-2.5 text-[10px] font-bold px-2 py-1"
@@ -137,7 +137,7 @@ export function StorefrontHome() {
                   className="absolute bg-white p-4 shadow-2xl transition-transform hover:scale-[1.05] hover:z-10"
                   style={{ left: poses.left, top: poses.top, width: poses.w, transform: `rotate(${poses.rot}deg)`, zIndex: poses.z, borderRadius: `calc(var(--sf-radius) * 1.4)` }}
                 >
-                  <StoreProductImage product={p} logoSrc={storeLogoSrc(store)} className="h-40" />
+                  <StoreProductMockup store={store} product={p} className="h-40" />
                   <div className="mt-2 text-[11px] font-bold text-neutral-900 truncate">{p.name}</div>
                   <div className="text-[12px] font-bold" style={{ color: 'var(--sf-primary)' }}>{fmtMoney(retailPrice(store, p))}</div>
                 </Link>
@@ -177,7 +177,7 @@ export function StorefrontHome() {
                 style={{ background: 'var(--sf-surface)', border: '1px solid var(--sf-border)', borderRadius: 'var(--sf-radius)' }}
               >
                 <div className="bg-white">
-                  {rep && <StoreProductImage product={rep} logoSrc={storeLogoSrc(store)} className="h-36 p-4 transition-transform duration-300 group-hover:scale-105" />}
+                  {rep && <StoreProductMockup store={store} product={rep} className="h-36 p-4 transition-transform duration-300 group-hover:scale-105" />}
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
                   <span className="text-[13.5px] font-bold">{cat}</span>

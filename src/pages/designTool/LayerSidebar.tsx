@@ -12,6 +12,8 @@ interface Props {
   selectedLayerId: string | null;
   printableArea: PrintableArea;
   backgroundColor: string | null;
+  /** override the logo picker's asset library (e.g. a store's uploaded logos) */
+  logoAssets?: AssetItem[];
   onSelect: (id: string | null) => void;
   onAdd: (layer: DesignLayer) => void;
   onDelete: (id: string) => void;
@@ -23,7 +25,7 @@ interface Props {
 type PickerType = 'logo' | 'graphic' | null;
 
 export function LayerSidebar({
-  layers, selectedLayerId, printableArea, backgroundColor,
+  layers, selectedLayerId, printableArea, backgroundColor, logoAssets,
   onSelect, onAdd, onDelete, onDuplicate, onUpdateLayer, onSetBackgroundColor,
 }: Props) {
   const [openPicker, setOpenPicker] = useState<PickerType>(null);
@@ -115,7 +117,7 @@ export function LayerSidebar({
             </button>
           </div>
           <div className="p-2 grid grid-cols-3 gap-1.5 max-h-44 overflow-y-auto">
-            {LOGO_ASSETS.map(asset => (
+            {(logoAssets ?? LOGO_ASSETS).map(asset => (
               <button
                 key={asset.id}
                 onClick={() => addAsset('logo', asset)}

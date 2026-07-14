@@ -7,7 +7,7 @@ import {
 } from '../../../data/storesData';
 import { useStores } from '../../../context/StoresContext';
 import { useLookbooks } from '../../../context/LookbookContext';
-import { StoreProductImage, storeLogoSrc } from '../../../components/stores/StoreBits';
+import { StoreProductMockup, storeLogoSrc } from '../../../components/stores/StoreBits';
 import { DesignToolPage } from '../../designTool/DesignToolPage';
 import { input, label } from './shared';
 
@@ -84,10 +84,11 @@ export function ProductEditor({ store, product, onClose }: {
           {/* ── Preview rail ── */}
           <div className="lg:col-span-2 lg:sticky lg:top-24 space-y-4">
             <div className="bg-white rounded-[16px] border border-snp-navy-200 overflow-hidden">
-              <StoreProductImage
+              <StoreProductMockup
+                store={store}
                 product={product}
                 logoSrc={previewLogoSrc}
-                tintHex={product.colors.find(c => c.name === previewColor)?.hex}
+                colorName={previewColor}
                 className="h-72 p-6"
               />
             </div>
@@ -166,15 +167,15 @@ export function ProductEditor({ store, product, onClose }: {
               <div className="flex items-center gap-3">
                 <div className="text-[12.5px] text-snp-navy-600 flex-1">
                   {layers.length
-                    ? <><b className="text-snp-navy-950">{layers.length} design element{layers.length !== 1 ? 's' : ''}</b> — logo, text and graphics placed in the design studio.</>
-                    : 'No custom artwork yet — the primary logo is auto-placed at the print area. Open the design studio to fine-tune placement, add text or extra graphics.'}
+                    ? <><b className="text-snp-navy-950">Artwork applied</b> — {layers.length} design element{layers.length !== 1 ? 's' : ''} (logo, text, graphics). Saving updates every mockup instantly: tiles, this page and the storefront.</>
+                    : <><b className="text-snp-navy-950">Artwork applied</b> — the store's primary logo is placed at the print area. Open the studio to reposition it, swap logos, or add text and graphics.</>}
                 </div>
                 <button
                   onClick={() => setShowDesigner(true)}
                   className="shrink-0 flex items-center gap-2 h-10 px-4 rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90"
                   style={{ background: 'linear-gradient(180deg, #5992d4 0%, #3077c9 100%)' }}
                 >
-                  <Brush className="w-3.5 h-3.5" /> {layers.length ? 'Edit artwork' : 'Create artwork'}
+                  <Brush className="w-3.5 h-3.5" /> Edit artwork
                 </button>
               </div>
 
@@ -306,6 +307,8 @@ export function ProductEditor({ store, product, onClose }: {
           <DesignToolPage
             product={product}
             lookbookId={storeArtworkKey(store.id)}
+            seedLogoUrl={storeLogoSrc(store)}
+            logoAssets={store.logos.map(l => ({ id: l.id, name: l.label, src: l.src }))}
             onClose={() => setShowDesigner(false)}
             onSave={() => setShowDesigner(false)}
           />

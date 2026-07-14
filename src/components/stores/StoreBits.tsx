@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react';
 import type { Product } from '../../data/mockData';
 import type { DistributorStore, StoreStatus } from '../../data/storesData';
+import { useLookbooks } from '../../context/LookbookContext';
+import type { ImageLayer, TextLayer } from '../../pages/designTool/types';
 
 // ── Store logo ────────────────────────────────────────────────────────────────
 
@@ -45,54 +47,29 @@ export function StoreStatusPill({ status, size = 'sm' }: { status: StoreStatus; 
 
 // ── Composited product image (store logo applied at the print area) ──────────
 
-function hexToHslBits(hex: string): { h: number; s: number; l: number } {
-  const m = hex.replace('#', '');
-  const r = parseInt(m.slice(0, 2), 16) / 255;
-  const g = parseInt(m.slice(2, 4), 16) / 255;
-  const b = parseInt(m.slice(4, 6), 16) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return { h: 0, s: 0, l };
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  let h: number;
-  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-  else if (max === g) h = ((b - r) / d + 2) / 6;
-  else h = ((r - g) / d + 4) / 6;
-  return { h: h * 360, s, l };
-}
-
-/**
- * CSS filter approximating a garment recolor from baseHex → targetHex.
- * Demo-level: hue-rotate keeps white studio backgrounds intact.
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function colorFilterFor(baseHex: string, targetHex: string): string | undefined {
-  if (!baseHex || !targetHex || baseHex === targetHex) return undefined;
-  const from = hexToHslBits(baseHex);
-  const to = hexToHslBits(targetHex);
-  const hue = Math.round(to.h - from.h);
-  const sat = from.s > 0.05 ? Math.min(2.5, Math.max(0.3, to.s / Math.max(0.08, from.s))) : 1;
-  const bright = Math.min(1.8, Math.max(0.5, to.l / Math.max(0.15, from.l)));
-  return `hue-rotate(${hue}deg) saturate(${sat.toFixed(2)}) brightness(${bright.toFixed(2)})`;
-}
-
 export type ProductView = 'front' | 'back' | 'detail';
 
-export function StoreProductImage({ product, logoSrc, className, imgStyle, view = 'front', tintHex }: {
+/** Colorway photo when real per-color assets exist — never a CSS tint. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function productImageFor(product: Product, colorName?: string | null): string {
+  if (colorName && product.colorImages?.[colorName]) return product.colorImages[colorName];
+  return product.image;
+}
+
+export function StoreProductImage({ product, logoSrc, className, imgStyle, view = 'front', colorName }: {
   product: Product;
   logoSrc: string;
   className?: string;
   imgStyle?: CSSProperties;
   /** 'detail' zooms into the print area; 'back' mirrors the photo without a logo (flat shots only) */
   view?: ProductView;
-  /** simulate a garment colorway with a CSS tint (relative to the product's first color) */
-  tintHex?: string | null;
+  /** selected colorway — swaps to real per-color photography when the product has it */
+  colorName?: string | null;
 }) {
-  const isPhoto = product.image.startsWith('/');
+  const src = productImageFor(product, colorName);
+  const isPhoto = src.startsWith('/');
   const pa = product.printArea;
   const showLogo = isPhoto && pa && logoSrc && view !== 'back';
-  const tint = tintHex ? colorFilterFor(product.colors[0]?.hex ?? '', tintHex) : undefined;
 
   // detail view: scale everything up around the print-area center so the logo zooms with the photo
   const zoom = view === 'detail' && pa
@@ -106,13 +83,13 @@ export function StoreProductImage({ product, logoSrc, className, imgStyle, view 
       <div className="relative w-full h-full" style={zoom}>
         {isPhoto ? (
           <img
-            src={product.image}
+            src={src}
             alt={product.name}
             className="w-full h-full object-contain"
-            style={{ mixBlendMode: 'multiply', filter: tint, ...imgStyle }}
+            style={{ mixBlendMode: 'multiply', ...imgStyle }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-5xl">{product.image}</div>
+          <div className="w-full h-full flex items-center justify-center text-5xl">{src}</div>
         )}
         {showLogo && (
           pa.style === 'badge' ? (
@@ -139,6 +116,111 @@ export function StoreProductImage({ product, logoSrc, className, imgStyle, view 
             />
           )
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Artwork-aware mockup ──────────────────────────────────────────────────────
+
+/**
+ * The one mockup renderer for store products. When the admin has authored
+ * artwork in the design studio (persisted under lookbook `store:${storeId}`),
+ * the saved layers render live over the product photo — so an artwork save
+ * refreshes tiles, the PDP and the storefront instantly. Without artwork it
+ * falls back to the print-area logo composite.
+ */
+export function StoreProductMockup({ store, product, className, logoSrc, colorName, view = 'front' }: {
+  store: DistributorStore;
+  product: Product;
+  className?: string;
+  /** override the composited logo (per-color or shopper-picked); defaults to the store's primary */
+  logoSrc?: string;
+  colorName?: string | null;
+  view?: ProductView;
+}) {
+  const { getProductDesign } = useLookbooks();
+  const design = getProductDesign(`store:${store.id}`, product.id);
+  const src = productImageFor(product, colorName);
+  const layers = design?.layers.filter(l => l.visible) ?? [];
+
+  if (!layers.length || !src.startsWith('/') || view !== 'front') {
+    return (
+      <StoreProductImage
+        product={product}
+        logoSrc={logoSrc ?? storeLogoSrc(store)}
+        className={className}
+        colorName={colorName}
+        view={view}
+      />
+    );
+  }
+
+  const cw = design!.canvasWidth || 460;
+  const chh = design!.canvasHeight || 520;
+
+  return (
+    <div className={`relative overflow-hidden flex items-center justify-center ${className ?? ''}`}>
+      {/* aspect box matching the design canvas so layer coordinates line up */}
+      <div
+        className="relative h-full max-w-full"
+        style={{ aspectRatio: `${cw} / ${chh}`, containerType: 'size' }}
+      >
+        <img src={src} alt={product.name} className="absolute inset-0 w-full h-full object-cover" style={{ mixBlendMode: 'multiply' }} />
+        {design!.backgroundColor && (
+          <div
+            className="absolute"
+            style={{
+              left: '20%', top: '16.9%', width: '60%', height: '66.2%', // printable area in canvas %
+              background: design!.backgroundColor,
+            }}
+          />
+        )}
+        {[...layers].sort((a, b) => a.zIndex - b.zIndex).map(layer => {
+          const pos: CSSProperties = {
+            position: 'absolute',
+            left: `${(layer.x / cw) * 100}%`,
+            top: `${(layer.y / chh) * 100}%`,
+            width: `${(layer.width / cw) * 100}%`,
+            height: `${(layer.height / chh) * 100}%`,
+            transform: `rotate(${layer.rotation}deg)`,
+            transformOrigin: 'top left',
+            opacity: layer.opacity,
+            pointerEvents: 'none',
+          };
+          if (layer.type === 'text') {
+            const t = layer as TextLayer;
+            return (
+              <div
+                key={layer.id}
+                style={{
+                  ...pos,
+                  display: 'flex',
+                  justifyContent: t.textAlign === 'center' ? 'center' : t.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                  fontSize: `${(t.fontSize / chh) * 100}cqh`,
+                  fontFamily: t.fontFamily,
+                  fontWeight: t.fontWeight,
+                  color: t.fillEnabled ? t.fillColor : 'transparent',
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: 1.2,
+                  overflow: 'hidden',
+                }}
+              >
+                {t.text}
+              </div>
+            );
+          }
+          const img = layer as ImageLayer;
+          return (
+            <img
+              key={layer.id}
+              src={img.src}
+              alt=""
+              style={{ ...pos, objectFit: 'contain', mixBlendMode: layer.type === 'logo' ? 'multiply' : 'normal', opacity: 0.94 }}
+              onError={e => (e.currentTarget.style.display = 'none')}
+            />
+          );
+        })}
       </div>
     </div>
   );

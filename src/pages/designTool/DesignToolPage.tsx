@@ -39,9 +39,13 @@ interface Props {
   onClose?: () => void;
   onSave?: (pickedLookbookId?: string) => void;
   approveMode?: boolean;
+  /** seed a fresh canvas with this logo instead of the company logo (e.g. the store's primary) */
+  seedLogoUrl?: string;
+  /** override the logo picker's asset library (e.g. a store's uploaded logos) */
+  logoAssets?: { id: string; name: string; src: string }[];
 }
 
-export function DesignToolPage({ product, lookbookId, onClose, onSave, approveMode }: Props) {
+export function DesignToolPage({ product, lookbookId, onClose, onSave, approveMode, seedLogoUrl, logoAssets }: Props) {
   const navigate = useNavigate();
   const isDirtyRef = useRef(false);
   const realClose = () => { onClose ? onClose() : navigate(-1); };
@@ -91,10 +95,13 @@ export function DesignToolPage({ product, lookbookId, onClose, onSave, approveMo
   isDirtyRef.current = isDirty;
 
   useEffect(() => {
-    if (!savedDesign && logoUrl && !logoSeededRef.current) {
+    // fresh canvases seed with the currently assigned logo — the caller's
+    // (e.g. the store's primary logo) wins over the company logo
+    const seed = seedLogoUrl ?? logoUrl;
+    if (!savedDesign && seed && !logoSeededRef.current) {
       logoSeededRef.current = true;
-      loadImageDimensions(logoUrl).then(({ w, h }) => {
-        editor.addLayer(makeImageLayerSized('logo', logoUrl, 'Company Logo', PRINTABLE_AREA, w, h));
+      loadImageDimensions(seed).then(({ w, h }) => {
+        editor.addLayer(makeImageLayerSized('logo', seed, seedLogoUrl ? 'Store Logo' : 'Company Logo', PRINTABLE_AREA, w, h));
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -395,6 +402,7 @@ export function DesignToolPage({ product, lookbookId, onClose, onSave, approveMo
           selectedLayerId={editor.state.selectedLayerId}
           printableArea={PRINTABLE_AREA}
           backgroundColor={editor.state.backgroundColor}
+          logoAssets={logoAssets}
           onSelect={editor.selectLayer}
           onAdd={editor.addLayer}
           onDelete={editor.deleteLayer}

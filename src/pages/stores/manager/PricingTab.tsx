@@ -25,7 +25,6 @@ export function PricingTab({ store }: { store: DistributorStore }) {
   }, [products, store]);
 
   return (
-    <div className="space-y-5">
     <div className="grid lg:grid-cols-5 gap-5 items-start">
       <div className="lg:col-span-2 space-y-5">
         {/* Global markup */}
@@ -110,6 +109,9 @@ export function PricingTab({ store }: { store: DistributorStore }) {
             <Plus className="w-3.5 h-3.5" /> Add tier
           </button>
         </div>
+
+        {/* Discount codes — directly beneath volume discounts */}
+        <DiscountCodesCard store={store} />
       </div>
 
       {/* Per-item price table */}
@@ -184,9 +186,6 @@ export function PricingTab({ store }: { store: DistributorStore }) {
         </table>
       </div>
     </div>
-
-    <DiscountCodesCard store={store} />
-    </div>
   );
 }
 
@@ -212,78 +211,69 @@ function DiscountCodesCard({ store }: { store: DistributorStore }) {
 
   return (
     <div className={`${card} p-5`}>
-      <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-        <div>
-          <span className="text-[15px] font-bold text-snp-navy-950 flex items-center gap-2"><Tag className="w-4 h-4 text-snp-indigo-700" /> Discount codes</span>
-          <p className="text-[12px] text-snp-navy-500 mt-0.5">Shoppers redeem codes at checkout. Codes stack after volume and member discounts.</p>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <div className="relative">
-            <input
-              value={testInput}
-              onChange={e => setTestInput(e.target.value)}
-              placeholder="Test a code…"
-              className="h-10 w-40 px-3 bg-white rounded-[10px] border border-snp-navy-200 text-[12.5px] uppercase outline-none focus:border-snp-indigo-500"
-            />
-            {testResult && (
-              <span className={`absolute -bottom-5 left-0 text-[10.5px] font-semibold whitespace-nowrap ${testResult.ok ? 'text-emerald-600' : 'text-snp-red-600'}`}>
-                {testResult.ok ? `✓ Valid — ${describeCode(testResult.code)}` : testResult.reason}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 h-10 px-4 rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90"
-            style={{ background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)' }}
-          >
-            <Plus className="w-4 h-4" /> Create code
-          </button>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <span className="text-[15px] font-bold text-snp-navy-950 flex items-center gap-2"><Tag className="w-4 h-4 text-snp-indigo-700" /> Discount codes</span>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-white text-[12.5px] font-semibold hover:opacity-90"
+          style={{ background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)' }}
+        >
+          <Plus className="w-3.5 h-3.5" /> Create
+        </button>
       </div>
+      <p className="text-[12px] text-snp-navy-500 mb-4">Redeemed at checkout — codes stack after volume and member discounts.</p>
 
       {store.discountCodes.length === 0 ? (
-        <p className="text-[13px] text-snp-navy-400 py-8 text-center">No discount codes yet — create one to run a promotion.</p>
+        <p className="text-[13px] text-snp-navy-400 py-6 text-center">No discount codes yet — create one to run a promotion.</p>
       ) : (
-        <table className="w-full text-left mt-4">
-          <thead>
-            <tr className="text-[10.5px] font-bold uppercase tracking-wider text-snp-navy-400 border-y border-snp-navy-100 bg-snp-navy-50/50">
-              <th className="py-2.5 pl-3">Code</th><th className="py-2.5">Discount</th><th className="py-2.5">Expires</th>
-              <th className="py-2.5 text-right">Uses</th><th className="py-2.5 pl-6">Scope</th><th className="py-2.5 text-center">Active</th><th className="py-2.5 w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {store.discountCodes.map(c => (
-              <tr key={c.id} className={`border-b border-snp-navy-50 last:border-0 text-[13px] ${!c.active ? 'opacity-50' : ''}`}>
-                <td className="py-3 pl-3 font-mono font-bold text-snp-navy-950">{c.code}</td>
-                <td className="py-3">
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-snp-indigo-50 text-snp-indigo-700">{describeCode(c)}</span>
-                </td>
-                <td className="py-3 text-snp-navy-600">{c.expiresAt ?? 'Never'}</td>
-                <td className="py-3 text-right text-snp-navy-700 font-semibold">{c.usedCount}{c.maxUses != null && ` / ${c.maxUses}`}</td>
-                <td className="py-3 pl-6">
-                  <div className="flex gap-1.5 flex-wrap">
-                    {c.userEmails.length > 0 && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-snp-purple-50 text-snp-purple-700">{c.userEmails.length} user{c.userEmails.length > 1 ? 's' : ''}</span>}
-                    {c.productIds.length > 0 && <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">{c.productIds.length} product{c.productIds.length > 1 ? 's' : ''}</span>}
-                    {c.userEmails.length === 0 && c.productIds.length === 0 && <span className="text-[10.5px] text-snp-navy-400">Storewide</span>}
-                  </div>
-                </td>
-                <td className="py-3 text-center">
-                  <input type="checkbox" className="accent-[#2563eb] w-4 h-4" checked={c.active} onChange={e => patchCode(c.id, { active: e.target.checked })} />
-                </td>
-                <td className="py-3 text-right pr-2">
+        <div className="space-y-2 mb-4">
+          {store.discountCodes.map(c => (
+            <div key={c.id} className={`rounded-[12px] border border-snp-navy-100 bg-snp-navy-50/40 px-3 py-2.5 ${!c.active ? 'opacity-50' : ''}`}>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-[13px] text-snp-navy-950">{c.code}</span>
+                <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-snp-indigo-50 text-snp-indigo-700">{describeCode(c)}</span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <input
+                    type="checkbox" title={c.active ? 'Active — click to deactivate' : 'Inactive'}
+                    className="accent-[#2563eb] w-4 h-4"
+                    checked={c.active}
+                    onChange={e => patchCode(c.id, { active: e.target.checked })}
+                  />
                   <button
                     title="Delete code"
                     onClick={() => updateStore(store.id, s => ({ discountCodes: s.discountCodes.filter(x => x.id !== c.id) }))}
-                    className="w-7 h-7 rounded-[7px] text-snp-navy-300 hover:text-snp-red-600 inline-flex items-center justify-center"
+                    className="w-6 h-6 rounded-[6px] text-snp-navy-300 hover:text-snp-red-600 inline-flex items-center justify-center"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+              <div className="mt-1 flex items-center gap-2 flex-wrap text-[11px] text-snp-navy-500">
+                <span>{c.usedCount}{c.maxUses != null && ` / ${c.maxUses}`} uses</span>
+                <span>·</span>
+                <span>{c.expiresAt ? `Expires ${c.expiresAt}` : 'Never expires'}</span>
+                {c.userEmails.length > 0 && <span className="font-semibold px-1.5 py-0.5 rounded-full bg-snp-purple-50 text-snp-purple-700">{c.userEmails.length} user{c.userEmails.length > 1 ? 's' : ''}</span>}
+                {c.productIds.length > 0 && <span className="font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">{c.productIds.length} product{c.productIds.length > 1 ? 's' : ''}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* Test a code */}
+      <div className="pt-3 border-t border-snp-navy-100">
+        <input
+          value={testInput}
+          onChange={e => setTestInput(e.target.value)}
+          placeholder="Test a code…"
+          className="w-full h-10 px-3 bg-white rounded-[10px] border border-snp-navy-200 text-[12.5px] uppercase outline-none focus:border-snp-indigo-500"
+        />
+        {testResult && (
+          <p className={`mt-1.5 text-[11px] font-semibold ${testResult.ok ? 'text-emerald-600' : 'text-snp-red-600'}`}>
+            {testResult.ok ? `✓ Valid — ${describeCode(testResult.code)}` : testResult.reason}
+          </p>
+        )}
+      </div>
 
       {showCreate && <CreateCodeModal store={store} onClose={() => setShowCreate(false)} />}
     </div>

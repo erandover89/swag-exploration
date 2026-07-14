@@ -54,6 +54,8 @@ export interface Product {
   printTechnique: PrintTechnique;
   printArea?: PrintArea; // where the logo appears on the product
   photoType?: 'flat' | 'model'; // 'model' = worn/lifestyle shot (no simulated back view)
+  /** real per-colorway photography: color NAME → image path (falls back to `image`) */
+  colorImages?: Record<string, string>;
   mockupImage?: string;
   hasMoreOptions?: boolean;
   quantityTiers?: QuantityTier[]; // bulk products only
