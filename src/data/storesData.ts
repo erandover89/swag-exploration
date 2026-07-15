@@ -666,7 +666,7 @@ const RAW_SEED_STORES: RawStore[] = [
     hiddenIds: [],
     pricing: {
       globalMarkupPct: 42,
-      productOverrides: { '13': 34.99 },
+      productOverrides: { '13': 49.99 },   // priced-up hero item — shows the override beating the global markup
       volumeTiers: DEFAULT_TIERS,
       showBulkSavings: true,
     },
